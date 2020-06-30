@@ -90,6 +90,7 @@
     <CudaCompile Include="main.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BackProjection.cuh" />
     <ClInclude Include="BilateralFilter.cuh" />
     <ClInclude Include="Eigen.h" />
     <ClInclude Include="FreeImageHelper.h" />

@@ -80,7 +80,7 @@ public:
 
 		if ((unsigned int)m_currentIdx >= (unsigned int)m_filenameColorImages.size()) return false;
 
-		std::cout << "ProcessNextFrame [" << m_currentIdx << " | " << m_filenameColorImages.size() << "]" << std::endl;
+		//std::cout << "ProcessNextFrame [" << m_currentIdx << " | " << m_filenameColorImages.size() << "]" << std::endl;
 
 		FreeImageB rgbImage;
 		rgbImage.LoadImageFromFile(m_baseDir + m_filenameColorImages[m_currentIdx]);
@@ -184,6 +184,26 @@ public:
 	Eigen::Matrix4f GetTrajectory()
 	{
 		return m_currentTrajectory;
+	}
+
+	float GetFX()
+	{
+		return m_depthIntrinsics(0, 0);
+	}
+
+	float GetFY()
+	{
+		return m_depthIntrinsics(1, 1);
+	}
+
+	float GetCX()
+	{
+		return m_depthIntrinsics(0, 2);
+	}
+
+	float GetCY()
+	{
+		return m_depthIntrinsics(1, 2);
 	}
 
 	void Destroy()
