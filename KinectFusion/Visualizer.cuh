@@ -13,6 +13,8 @@
 #include "VirtualSensor.h"
 #include "BilateralFilter.cuh"
 #include "BackProjection.cuh"
+#include "NormalCalculation.cuh"
+#include "NormalCalculationEigen.h"
 
 #define KINECT 0;
 
@@ -24,23 +26,31 @@ class Visualizer
 {
 public:
 
-	Visualizer(int skip = 1) : sensor(skip), filterer(640,480), backProjector(640, 480)
+	Visualizer(int skip = 1) : sensor(skip), filterer(640,480), backProjector(640, 480), normalCalculator(640, 480)
 	{
 		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
 		
 		if (!sensor.Init(filenameIn))
 		{
-			std::cout << "Failed to initialize the sensor!\nCheck file path!" << std::endl;
+			std::cerr << "Failed to initialize the sensor!\nCheck file path!" << std::endl;
 			exit(1);
 		}
 
-		if (!filterer.isOK()) {
-			std::cout << "Failed to initialize the filterer!\nCheck your gpu memory!" << std::endl;
+		if (!filterer.isOK()) 
+		{
+			std::cerr << "Failed to initialize the filterer!\nCheck your gpu memory!" << std::endl;
 			exit(1);
 		}
 
-		if (!backProjector.isOK()) {
-			std::cout << "Failed to initialize the back projector!\nCheck your gpu memory!" << std::endl;
+		if (!backProjector.isOK()) 
+		{
+			std::cerr << "Failed to initialize the back projector!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!normalCalculator.isOK())
+		{
+			std::cerr << "Failed to initialize the back projector!\nCheck your gpu memory!" << std::endl;
 			exit(1);
 		}
 
@@ -69,9 +79,26 @@ public:
 		float* vertices;
 		float* verticesFirstLevel;
 		float* verticesSecondLevel;
+		float* normals;
+		float* normalsFirstLevel;
+		float* normalsSecondLevel;
 		Instance->filterer.applyFilter(Instance->depthImage);
 		Instance->backProjector.apply(Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
-		/*if (!Instance->isWritten)
+		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
+		
+		/* Normals CPU Calculation Comparison
+		if (Instance->backProjector.copyToCPU() && Instance->normalCalculator.copyToCPU()) {
+			vertices = Instance->backProjector.getOutputCPU(0);
+			verticesFirstLevel = Instance->backProjector.getOutputCPU(1);
+			verticesSecondLevel = Instance->backProjector.getOutputCPU(2);
+			normals = Instance->normalCalculator.getOutputCPU(0);
+			normalsFirstLevel = Instance->normalCalculator.getOutputCPU(1);
+			normalsSecondLevel = Instance->normalCalculator.getOutputCPU(2);
+			std::cout << "Error: " << calculateNormalError(normals, vertices, 640, 480) << std::endl;
+		}*/
+		
+		/* Writing Point Cloud to .off
+		if (!Instance->isWritten)
 		{
 			std::cout << Instance->isWritten << std::endl;
 			Instance->isWritten = true;
@@ -303,6 +330,7 @@ private:
 	#endif 
 	Filterer filterer;
 	BackProjector backProjector;
+	NormalCalculator normalCalculator;
 	bool isWritten = false;
 };
 

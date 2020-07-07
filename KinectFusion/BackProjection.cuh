@@ -30,47 +30,6 @@ void applyBackProjection(float* output, float* depthInput, int depthInputWidth, 
 	}
 }
 
-__global__
-void findNormalVector(float* output, short* validMask, float* backProjectedInput,int backProjectedInputHeight, int backProjectedInputWidth)
-{
-	int x = blockIdx.x * blockDim.x + threadIdx.x;
-	int y = blockIdx.y * blockDim.y + threadIdx.y;
-
-	int indexWithoutChannel = backProjectedInputWidth * y + x;
-
-	if ((x >= (backProjectedInputWidth-1)) || (y >= (backProjectedInputHeight-1))) 
-	{
-		if ((x == (backProjectedInputWidth - 1)) || (y == (backProjectedInputHeight - 1))) 
-		{
-			validMask[indexWithoutChannel] = 0;
-		}
-		return;
-	}
-
-	int index = 3 * indexWithoutChannel;
-	int indexRight = 3 * (indexWithoutChannel + 1);
-	int indexDown = 3 * (indexWithoutChannel + backProjectedInputWidth);
-	
-	float values[3] = { backProjectedInput[index],backProjectedInput[index + 1],backProjectedInput[index + 2] };
-	float valuesDown[3] = { backProjectedInput[indexDown],backProjectedInput[indexDown + 1],backProjectedInput[indexDown + 2] };
-	float valuesRight[3] = { backProjectedInput[indexRight],backProjectedInput[indexRight + 1],backProjectedInput[indexRight + 2] };
-
-	if(isinf(values[0])||isinf(valuesDown[0])||isinf(valuesRight[0]))
-	{ 
-		validMask[indexWithoutChannel] = 0;
-	}
-	else
-	{
-		validMask[indexWithoutChannel] = 1;
-		float vectorDown[3] = { valuesDown[0] - values[0],valuesDown[1] - values[1],valuesDown[2] - values[2] };
-		float vectorRight[3] = { valuesRight[0] - values[0],valuesRight[1] - values[1],valuesRight[2] - values[2] };
-		
-		output[index] = vectorRight[1] * vectorDown[2] - vectorRight[2] * vectorDown[1];
-		output[index + 1] = vectorRight[2] * vectorDown[0] - vectorRight[0] * vectorDown[2];
-		output[index + 2] = vectorRight[0] * vectorDown[1] - vectorRight[1] * vectorDown[0];
-	}
-}
-
 class BackProjector {
 public:
 	BackProjector(int width, int height)

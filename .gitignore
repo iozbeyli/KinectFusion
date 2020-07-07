@@ -341,3 +341,4 @@ healthchecksdb
 
 data/
 libs/
+*.off

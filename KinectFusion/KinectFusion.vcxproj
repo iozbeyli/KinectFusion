@@ -96,6 +96,8 @@
     <ClInclude Include="FreeImageHelper.h" />
     <ClInclude Include="GLUtilities.h" />
     <ClInclude Include="KinectSensor.h" />
+    <ClInclude Include="NormalCalculation.cuh" />
+    <ClInclude Include="NormalCalculationEigen.h" />
     <ClInclude Include="Sensor.h" />
     <ClInclude Include="TextureManager.h" />
     <ClInclude Include="VirtualSensor.h" />
