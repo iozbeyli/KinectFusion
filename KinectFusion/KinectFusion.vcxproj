@@ -98,6 +98,7 @@
     <ClInclude Include="KinectSensor.h" />
     <ClInclude Include="NormalCalculation.cuh" />
     <ClInclude Include="NormalCalculationEigen.h" />
+    <ClInclude Include="PoseEstimator.cuh" />
     <ClInclude Include="Sensor.h" />
     <ClInclude Include="TextureManager.h" />
     <ClInclude Include="VirtualSensor.h" />

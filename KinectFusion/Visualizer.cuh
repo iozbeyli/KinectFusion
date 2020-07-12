@@ -15,6 +15,7 @@
 #include "BackProjection.cuh"
 #include "NormalCalculation.cuh"
 #include "NormalCalculationEigen.h"
+#include "PoseEstimator.cuh"
 
 #define KINECT 0;
 
@@ -86,8 +87,8 @@ public:
 		Instance->backProjector.apply(Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
-		/* Normals CPU Calculation Comparison
-		if (Instance->backProjector.copyToCPU() && Instance->normalCalculator.copyToCPU()) {
+		//Normals CPU Calculation Comparison
+		/*if (Instance->backProjector.copyToCPU() && Instance->normalCalculator.copyToCPU()) {
 			vertices = Instance->backProjector.getOutputCPU(0);
 			verticesFirstLevel = Instance->backProjector.getOutputCPU(1);
 			verticesSecondLevel = Instance->backProjector.getOutputCPU(2);

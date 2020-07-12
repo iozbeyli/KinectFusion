@@ -10,6 +10,9 @@
     <Filter Include="Source Files">
       <UniqueIdentifier>{81a06898-e056-4a0c-8c11-35d190d49940}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\NewFilter1">
+      <UniqueIdentifier>{37afcf15-bab8-4b7d-8559-dd96a9e1a8db}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BilateralFilter.cuh">
@@ -46,6 +49,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="NormalCalculationEigen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PoseEstimator.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -44,6 +44,12 @@ public:
 		// read tracking
 		if (!ReadTrajectoryFile(datasetDir + "groundtruth.txt", m_trajectory, m_trajectoryTimeStamps)) return false;
 
+		// set initial position to zero
+		Matrix4f im = m_trajectory[0].inverse();
+		for (auto& m : m_trajectory) {
+			m = m * im;
+		}
+
 		if (m_filenameDepthImages.size() != m_filenameColorImages.size()) return false;
 
 		// image resolutions
