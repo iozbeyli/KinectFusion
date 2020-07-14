@@ -162,7 +162,7 @@ public:
 		}
 	}
 
-	void setParams(Vector<float, 6> params)
+	void setParams(Vector6f params)
 	{
 		m_rX = params(0);
 		m_rY = params(1);
@@ -174,7 +174,7 @@ public:
 
 	auto getParamVector()
 	{
-		return Vector<float, 6>(m_rX, m_rY, m_rZ, m_tX, m_tY, m_tZ);
+		return Vector6f(m_rX, m_rY, m_rZ, m_tX, m_tY, m_tZ);
 	}
 
 	void apply(float* depthPoints, float* normals)
@@ -256,7 +256,7 @@ private:
 	bool solve()
 	{
 		Matrix<float, 6, 6> Gmat;
-		Vector<float, 6> bvec;
+		Vector6f bvec;
 		auto stat0 = cudaMemcpy(Gmat.data(), m_AtA, 36 * sizeof(float), cudaMemcpyDeviceToHost);
 		auto stat1 = cudaMemcpy(bvec.data(), m_AtB, 6 * sizeof(float), cudaMemcpyDeviceToHost);
 		if (stat0 != cudaSuccess || stat1 != cudaSuccess)

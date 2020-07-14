@@ -86,3 +86,5 @@ std::ostream& operator<<(std::ostream& out, const Eigen::Quaternion<T>& other)
 	out << other.x() << "\t" << other.y() << "\t" << other.z() << "\t" << other.w();
 	return out;
 }
+
+using Vector6f = Matrix<float,6,1>;
