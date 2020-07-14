@@ -39,9 +39,6 @@
     <ClInclude Include="VirtualSensor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Visualizer.cuh">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="BackProjection.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -52,6 +49,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PoseEstimator.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Visualizer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

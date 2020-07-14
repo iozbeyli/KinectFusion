@@ -129,10 +129,14 @@ public:
 		m_c_Y = c_Y;
 	}
 
+	void swap(BackProjector* prevBackProjector) 
+	{
+		std::swap(m_outputBackProjected, prevBackProjector->m_outputBackProjected);
+		std::swap(m_outputBackProjectedFirstLevel, prevBackProjector->m_outputBackProjectedFirstLevel);
+		std::swap(m_outputBackProjectedSecondLevel, prevBackProjector->m_outputBackProjectedSecondLevel);
+	}
+
 private:
-	float* m_input;
-	float* m_inputFirstLevel;
-	float* m_inputSecondLevel;
 	
 	float* m_outputBackProjected;
 	float* m_outputBackProjectedFirstLevel;
@@ -141,14 +145,6 @@ private:
 	float* m_outputBackProjectedCPU;
 	float* m_outputBackProjectedFirstLevelCPU;
 	float* m_outputBackProjectedSecondLevelCPU;
-	
-	float* m_outputNormal;
-	float* m_outputNormalFirstLevel;
-	float* m_outputNormalSecondLevel;
-
-	float* m_outputNormalCPU;
-	float* m_outputNormalFirstLevelCPU;
-	float* m_outputNormalSecondLevelCPU;
 
 	cudaError_t m_cudaStatusInput;
 	cudaError_t m_cudaStatusOutput;

@@ -198,11 +198,18 @@ public:
 		return m_validMask;
 	}
 
-private:
-	float* m_input;
-	float* m_inputFirstLevel;
-	float* m_inputSecondLevel;
+	void swap(NormalCalculator* prevNormalCalculator)
+	{
+		std::swap(m_outputNormal, prevNormalCalculator->m_outputNormal);
+		std::swap(m_outputNormalFirstLevel, prevNormalCalculator->m_outputNormalFirstLevel);
+		std::swap(m_outputNormalSecondLevel, prevNormalCalculator->m_outputNormalSecondLevel);
 
+		std::swap(m_validMask, prevNormalCalculator->m_validMask);
+		std::swap(m_validMaskFirstLevel, prevNormalCalculator->m_validMaskFirstLevel);
+		std::swap(m_validMaskSecondLevel, prevNormalCalculator->m_validMaskSecondLevel);
+	}
+
+private:
 	float* m_outputNormal;
 	float* m_outputNormalFirstLevel;
 	float* m_outputNormalSecondLevel;
