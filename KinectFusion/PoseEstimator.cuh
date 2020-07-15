@@ -45,13 +45,13 @@ __device__ __forceinline__ float dot(float x1, float y1, float z1,
 
 __global__
 void fillMatrix(float* outputA, float* outputB,
-				float* sourcePoints, float* targetPoints,
-				float* sourceNormals, float* targetNormals,
-				bool* validMask,
-				float rX, float rY, float rZ,
-				float tX, float tY, float tZ,
-				int width, int height,
-				float distanceThreshold, float normalThreshold, float scale)
+		float* sourcePoints, float* targetPoints,
+		float* sourceNormals, float* targetNormals,
+		bool* validMask,
+		float rX, float rY, float rZ,
+		float tX, float tY, float tZ,
+		int width, int height,
+		float distanceThreshold, float normalThreshold, float scale)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -128,11 +128,11 @@ void fillMatrix(float* outputA, float* outputB,
 	outputB[indexB] = dot(nX, nY, nZ, dX, dY, dZ) - dot(nX, nY, nZ, sX, sY, sZ);
 }
 
-#define CUCHECK					\
-	if (status != cudaSuccess)  \
-	{							\
-		m_ok = false;			\
-		return;					\
+#define CUCHECK				\
+	if (status != cudaSuccess) 	\
+	{				\
+		m_ok = false;		\
+		return;			\
 	}
 
 class PoseEstimator
@@ -182,7 +182,7 @@ public:
 		return result;
 	}
 
-	bool apply(	float* sourcePoints, float* targetPoints, float* sourceNormals, float* targetNormals, bool* validMask)
+	bool apply(float* sourcePoints, float* targetPoints, float* sourceNormals, float* targetNormals, bool* validMask)
 	{
 		dim3 gridSize(m_width / 8, m_height / 8);
 		dim3 blockSize(8, 8);
@@ -190,13 +190,13 @@ public:
 		{
 			auto prev = getParamVector();
 			fillMatrix<<<gridSize, blockSize>>>(m_A, m_B,
-												sourcePoints, targetPoints,
-												sourceNormals, targetNormals,
-												validMask,
-												m_rX, m_rY, m_rZ,
-												m_tX, m_tY, m_tZ,
-												m_width, m_height,
-												D_THRESHOLD, N_THRESHOLD, m_scale);
+							sourcePoints, targetPoints,
+							sourceNormals, targetNormals,
+							validMask,
+							m_rX, m_rY, m_rZ,
+							m_tX, m_tY, m_tZ,
+							m_width, m_height,
+							D_THRESHOLD, N_THRESHOLD, m_scale);
 			if (!matMul())
 			{
 				std::cerr << "Matrix multiplication failed" << std::endl;
