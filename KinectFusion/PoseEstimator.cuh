@@ -6,6 +6,8 @@
 #include "cublas_v2.h"
 #include "malloc.h"
 #include "EigenSolver.h"
+#include <arrayfire.h>
+#include <af/cuda.h>
 
 // TODO: Refactor
 #define FX 525.0f
@@ -14,7 +16,7 @@
 #define CY 239.5f
 #define D_THRESHOLD 0.1f
 #define N_THRESHOLD 0.05f
-
+#define MIN_PARAM_CHANGE 0.000001f
 
 __device__ __forceinline__ void setZero(float* outputA, float* outputB, int indexA, int indexB)
 {
@@ -49,7 +51,7 @@ void fillMatrix(float* outputA, float* outputB,
 				float rX, float rY, float rZ,
 				float tX, float tY, float tZ,
 				int width, int height,
-				float distanceThreshold, float normalThreshold)
+				float distanceThreshold, float normalThreshold, float scale)
 {
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -87,9 +89,9 @@ void fillMatrix(float* outputA, float* outputB,
 	}
 
 	// Project source to target's image plane
-	int col = roundf(FX * pX / pZ + CX);
-	int row = roundf(FY * pY / pZ + CY);
-	if (col < 0 && col >= width && row < 0 && row >= height)
+	int col = roundf(scale * FX * pX / pZ + CX * scale);
+	int row = roundf(scale * FY * pY / pZ + CY * scale);
+	if (col < 0 || col >= width || row < 0 || row >= height)
 	{
 		setZero(outputA, outputB, indexA, indexB);
 		return;
@@ -137,11 +139,12 @@ class PoseEstimator
 {
 public:
 
-	PoseEstimator(int width, int height, int niter)
+	PoseEstimator(int width, int height, int niter, float scale)
 	{
 		m_width = width;
 		m_height = height;
 		m_iter = niter;
+		m_scale = scale;
 		auto size = m_height * m_width * sizeof(float);
 
 		cudaError_t status;
@@ -185,6 +188,7 @@ public:
 		dim3 blockSize(8, 8);
 		for (int i = 0; i < m_iter; ++i)
 		{
+			auto prev = getParamVector();
 			fillMatrix<<<gridSize, blockSize>>>(m_A, m_B,
 												sourcePoints, targetPoints,
 												sourceNormals, targetNormals,
@@ -192,7 +196,7 @@ public:
 												m_rX, m_rY, m_rZ,
 												m_tX, m_tY, m_tZ,
 												m_width, m_height,
-												D_THRESHOLD, N_THRESHOLD);
+												D_THRESHOLD, N_THRESHOLD, m_scale);
 			if (!matMul())
 			{
 				std::cerr << "Matrix multiplication failed" << std::endl;
@@ -202,6 +206,11 @@ public:
 			{
 				std::cerr << "Solve failed" << std::endl;
 				return false;
+			}
+			float totalChange = (getParamVector() - prev).norm();
+			if (totalChange < MIN_PARAM_CHANGE)
+			{
+				break;
 			}
 		}
 		return true;
@@ -259,31 +268,26 @@ private:
 		}
 
 		cublasStatus_t status;
-		int m = 6;
-		int k = m_width * m_height;
 		int n = 6;
-		int lda = m, ldb = m, ldc = m;
-		const float alf = 1;
-		const float bet = 0;
-		const float* alpha = &alf;
-		const float* beta = &bet;
-		status = cublasSgemm(
-			m_handle, CUBLAS_OP_N, CUBLAS_OP_T,
-			m, n, k,
-			alpha, m_A, lda, m_A, ldb, beta, m_AtA, ldc);
-		if (status != CUBLAS_STATUS_SUCCESS)
-		{
-			return false;
-		}
+		int k = m_height * m_width;
+		const float alpha = 1.0f;
+		const float beta = 0;
+		status =  cublasSgemm(m_handle, CUBLAS_OP_N, CUBLAS_OP_T, n, n, k, &alpha, m_A, n, m_A, n,
+			&beta, m_AtA, n);
+		/*status = cublasSsyrk(
+			m_handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N,
+			n, k, &alpha, m_A, n, &beta, m_AtA, n
+		);*/
 
-		n = 1;
-		lda = m;
-		ldb = k; 
-		ldc = m;
-		status = cublasSgemm(
-			m_handle, CUBLAS_OP_N, CUBLAS_OP_N,
-			m, n, k,
-			alpha, m_A, lda, m_B, ldb, beta, m_AtB, ldc);
+		status = cublasSgemv(
+			m_handle, CUBLAS_OP_N,
+			n, k,
+			&alpha,
+			m_A, n,
+			m_B, 1,
+			&beta,
+			m_AtB, 1
+		);
 		if (status != CUBLAS_STATUS_SUCCESS)
 		{
 			return false;
@@ -299,13 +303,12 @@ private:
 		Vector6f x;
 		auto stat0 = cudaMemcpy(Amat.data(), m_AtA, 36 * sizeof(float), cudaMemcpyDeviceToHost);
 		auto stat1 = cudaMemcpy(bvec.data(), m_AtB, 6 * sizeof(float), cudaMemcpyDeviceToHost);
-		
 		if (stat0 != cudaSuccess || stat1 != cudaSuccess)
 		{
 			return false;
 		}
-		std::cout << Amat << std::endl << bvec << std::endl;
 		x = ::solve(Amat, bvec);
+		//std::cout << Amat << bvec << std::endl;
 		setParams(x);
 		return true;
 	}
@@ -316,6 +319,7 @@ private:
 	int m_height;
 	bool m_ok = true;
 	int m_iter;
+	float m_scale;
 
 	float* m_A;
 	float* m_B;

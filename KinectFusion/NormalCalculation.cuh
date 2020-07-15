@@ -58,7 +58,7 @@ public:
 		m_width = width;
 		m_height = height;
 		m_size = 3 * width * height * sizeof(float);
-		m_sizeValidMask = 3 * width * height * sizeof(bool);
+		m_sizeValidMask = width * height * sizeof(bool);
 
 		cudaError_t cudaStatusOutput = cudaMalloc((void**)&m_outputNormal, m_size);
 		cudaError_t cudaStatusOutputFirstLevel = cudaMalloc((void**)&m_outputNormalFirstLevel, m_size / 4);
@@ -198,15 +198,25 @@ public:
 		return m_validMask;
 	}
 
-	void swap(NormalCalculator* prevNormalCalculator)
+	void copy(NormalCalculator* currentNormalCalculator)
 	{
-		std::swap(m_outputNormal, prevNormalCalculator->m_outputNormal);
-		std::swap(m_outputNormalFirstLevel, prevNormalCalculator->m_outputNormalFirstLevel);
-		std::swap(m_outputNormalSecondLevel, prevNormalCalculator->m_outputNormalSecondLevel);
 
-		std::swap(m_validMask, prevNormalCalculator->m_validMask);
-		std::swap(m_validMaskFirstLevel, prevNormalCalculator->m_validMaskFirstLevel);
-		std::swap(m_validMaskSecondLevel, prevNormalCalculator->m_validMaskSecondLevel);
+		cudaError_t status = cudaMemcpy(m_outputNormal, currentNormalCalculator->m_outputNormal, m_size, cudaMemcpyDeviceToDevice);
+		cudaError_t statusFirst = cudaMemcpy(m_outputNormalFirstLevel, currentNormalCalculator->m_outputNormalFirstLevel, m_size/4, cudaMemcpyDeviceToDevice);
+		cudaError_t statusSecond = cudaMemcpy(m_outputNormalSecondLevel, currentNormalCalculator->m_outputNormalSecondLevel, m_size/16, cudaMemcpyDeviceToDevice);
+		if (status || statusFirst || statusSecond)
+		{
+			std::cout << "Normal copy fails" << std::endl;
+		}
+		
+		status=cudaMemcpy(m_validMask, currentNormalCalculator->m_validMask, m_sizeValidMask, cudaMemcpyDeviceToDevice);
+		statusFirst = cudaMemcpy(m_validMaskFirstLevel, currentNormalCalculator->m_validMaskFirstLevel, m_sizeValidMask / 4, cudaMemcpyDeviceToDevice);
+		statusSecond = cudaMemcpy(m_validMaskSecondLevel, currentNormalCalculator->m_validMaskSecondLevel, m_sizeValidMask / 16, cudaMemcpyDeviceToDevice);
+	
+		if (status || statusFirst || statusSecond)
+		{
+			std::cout << "Valid copy fails" << std::endl;
+		}
 	}
 
 private:

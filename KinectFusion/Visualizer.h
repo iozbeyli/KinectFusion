@@ -32,9 +32,11 @@ public:
 								filterer(640,480), 
 								backProjector(640, 480), 
 								normalCalculator(640, 480), 
-								poseEstimator(640, 480, 10),
+								poseEstimator(640, 480, 10, 1.0f),
 								prevBackProjector(640, 480), 
-								prevNormalCalculator(640, 480)
+								prevNormalCalculator(640, 480),
+								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
+								poseEstimatorSecondLevel(160, 120, 4, 0.25f)
 	{
 		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
 		
@@ -65,6 +67,18 @@ public:
 		if (!poseEstimator.isOk())
 		{
 			std::cerr << "Failed to initialize the pose estimator!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!poseEstimatorFirstLevel.isOk())
+		{
+			std::cerr << "Failed to initialize the first level pose estimator!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!poseEstimatorSecondLevel.isOk())
+		{
+			std::cerr << "Failed to initialize the second level pose estimator!\nCheck your gpu memory!" << std::endl;
 			exit(1);
 		}
 
@@ -101,20 +115,38 @@ public:
 		Instance->backProjector.apply(Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
-		if (Instance->frameNumber == 2)
+		if (Instance->frameNumber > 1)
 		{
-			if(Instance->poseEstimator.apply(	Instance->backProjector.getOutputGPU(0),
-											Instance->prevBackProjector.getOutputGPU(0),
-											Instance->normalCalculator.getOutputGPU(0),
-											Instance->prevNormalCalculator.getOutputGPU(0),
-											Instance->normalCalculator.getValidMaskGPU(0)))
+			std::cout << Instance->frameNumber << std::endl;
+			Instance->poseEstimatorSecondLevel.resetParams();
+			if (Instance->poseEstimatorSecondLevel.apply(Instance->backProjector.getOutputGPU(2),
+				Instance->prevBackProjector.getOutputGPU(2),
+				Instance->normalCalculator.getOutputGPU(2),
+				Instance->prevNormalCalculator.getOutputGPU(2),
+				Instance->normalCalculator.getValidMaskGPU(2)))
 			{
-				std::cout << Instance->poseEstimator.getTransform() << std::endl;
+				Instance->poseEstimatorFirstLevel.setParams(Instance->poseEstimatorSecondLevel.getParamVector());
+				if (Instance->poseEstimatorFirstLevel.apply(Instance->backProjector.getOutputGPU(1),
+					Instance->prevBackProjector.getOutputGPU(1),
+					Instance->normalCalculator.getOutputGPU(1),
+					Instance->prevNormalCalculator.getOutputGPU(1),
+					Instance->normalCalculator.getValidMaskGPU(1)))
+				{
+					Instance->poseEstimator.setParams(Instance->poseEstimator.getParamVector());
+					if (Instance->poseEstimator.apply(Instance->backProjector.getOutputGPU(0),
+						Instance->prevBackProjector.getOutputGPU(0),
+						Instance->normalCalculator.getOutputGPU(0),
+						Instance->prevNormalCalculator.getOutputGPU(0),
+						Instance->normalCalculator.getValidMaskGPU(0)))
+					{
+						std::cout << Instance->poseEstimator.getTransform() << std::endl;
+					}
+				}
 			}
-			else {
-				std::cout << "After solve fails" << std::endl;
-			}
+			
+			
 		}
+		
 		
 		//Instance->poseEstimator.apply(
 		//Normals CPU Calculation Comparison
@@ -214,9 +246,8 @@ public:
 
 			
 		}
-
-		Instance->backProjector.swap(&Instance->prevBackProjector);
-		Instance->normalCalculator.swap(&Instance->prevNormalCalculator); 
+		Instance->prevBackProjector.copy(&Instance->backProjector);
+		Instance->prevNormalCalculator.copy(&Instance->normalCalculator); 
 	}
 
 	static void update()
@@ -368,6 +399,8 @@ private:
 	BackProjector prevBackProjector;
 	NormalCalculator prevNormalCalculator;
 	PoseEstimator poseEstimator;
+	PoseEstimator poseEstimatorFirstLevel;
+	PoseEstimator poseEstimatorSecondLevel;
 	bool isWritten = false;
 	int frameNumber = 0;
 };
