@@ -29,7 +29,7 @@ __device__ __forceinline__ void setZero(float* outputA, float* outputB, int inde
 }
 
 __device__ __forceinline__ float l2Diff(float x1, float y1, float z1, 
-										float x2, float y2, float z2)
+					float x2, float y2, float z2)
 {
 	float d1 = (x1 - x2);
 	float d2 = (y1 - y2);
@@ -37,8 +37,8 @@ __device__ __forceinline__ float l2Diff(float x1, float y1, float z1,
 	return sqrtf(d1 * d1 + d2 * d2 + d3 * d3);
 }
 
-__device__ __forceinline__ float dot(float x1, float y1, float z1,
-									 float x2, float y2, float z2)
+__device__ __forceinline__ float dot(	float x1, float y1, float z1,
+					float x2, float y2, float z2)
 {
 	return x1 * x2 + y1 * y2 + z1 * z2;
 }
