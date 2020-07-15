@@ -47,13 +47,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\include;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Eigen;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Program Files\ArrayFire\v3\include;C:\Users\melih\source\repos\EigenSolver\EigenSolver;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\include;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Eigen;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;FreeImage.lib;opengl32.lib;glew32.lib;freeglut.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\lib\Release\Win32;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cublas.lib;cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;FreeImage.lib;opengl32.lib;glew32.lib;freeglut.lib;EigenSolver.lib;afcuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Program Files\ArrayFire\v3\lib;C:\Users\melih\source\repos\EigenSolver\x64\Release;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\lib\Release\Win32;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
@@ -69,15 +69,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\include;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Eigen;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Program Files\ArrayFire\v3\include;C:\Users\melih\source\repos\EigenSolver\EigenSolver;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\include;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Eigen;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;FreeImage.lib;opengl32.lib;glew32.lib;freeglut.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\lib\Release\Win32;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cublas.lib;cudart_static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;FreeImage.lib;opengl32.lib;glew32.lib;freeglut.lib;EigenSolver.lib;afcuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Program Files\ArrayFire\v3\lib;C:\Users\melih\source\repos\EigenSolver\x64\Release;C:\Users\melih\Documents\Visual Studio 2019\External Libs\Freeglut;C:\Users\melih\Documents\Visual Studio 2019\External Libs\GLEW\lib\Release\Win32;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64;C:\Users\melih\Documents\Visual Studio 2019\Projects\KinectFusion\libs\FreeImage\x64\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
@@ -102,7 +102,7 @@
     <ClInclude Include="Sensor.h" />
     <ClInclude Include="TextureManager.h" />
     <ClInclude Include="VirtualSensor.h" />
-    <ClInclude Include="Visualizer.cuh" />
+    <ClInclude Include="Visualizer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp" />

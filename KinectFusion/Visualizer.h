@@ -17,6 +17,7 @@
 #include "NormalCalculationEigen.h"
 #include "PoseEstimator.cuh"
 
+
 #define KINECT 0;
 
 #if KINECT
@@ -27,7 +28,15 @@ class Visualizer
 {
 public:
 
-	Visualizer(int skip = 1) : sensor(skip), filterer(640,480), backProjector(640, 480), normalCalculator(640, 480)
+	Visualizer(int skip = 1) :	sensor(skip), 
+								filterer(640,480), 
+								backProjector(640, 480), 
+								normalCalculator(640, 480), 
+								poseEstimator(640, 480, 10, 1.0f),
+								prevBackProjector(640, 480), 
+								prevNormalCalculator(640, 480),
+								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
+								poseEstimatorSecondLevel(160, 120, 4, 0.25f)
 	{
 		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
 		
@@ -52,6 +61,24 @@ public:
 		if (!normalCalculator.isOK())
 		{
 			std::cerr << "Failed to initialize the back projector!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!poseEstimator.isOk())
+		{
+			std::cerr << "Failed to initialize the pose estimator!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!poseEstimatorFirstLevel.isOk())
+		{
+			std::cerr << "Failed to initialize the first level pose estimator!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!poseEstimatorSecondLevel.isOk())
+		{
+			std::cerr << "Failed to initialize the second level pose estimator!\nCheck your gpu memory!" << std::endl;
 			exit(1);
 		}
 
@@ -83,10 +110,45 @@ public:
 		float* normals;
 		float* normalsFirstLevel;
 		float* normalsSecondLevel;
+		Instance->frameNumber++;
 		Instance->filterer.applyFilter(Instance->depthImage);
 		Instance->backProjector.apply(Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
+		if (Instance->frameNumber > 1)
+		{
+			std::cout << Instance->frameNumber << std::endl;
+			Instance->poseEstimatorSecondLevel.resetParams();
+			if (Instance->poseEstimatorSecondLevel.apply(Instance->backProjector.getOutputGPU(2),
+				Instance->prevBackProjector.getOutputGPU(2),
+				Instance->normalCalculator.getOutputGPU(2),
+				Instance->prevNormalCalculator.getOutputGPU(2),
+				Instance->normalCalculator.getValidMaskGPU(2)))
+			{
+				Instance->poseEstimatorFirstLevel.setParams(Instance->poseEstimatorSecondLevel.getParamVector());
+				if (Instance->poseEstimatorFirstLevel.apply(Instance->backProjector.getOutputGPU(1),
+					Instance->prevBackProjector.getOutputGPU(1),
+					Instance->normalCalculator.getOutputGPU(1),
+					Instance->prevNormalCalculator.getOutputGPU(1),
+					Instance->normalCalculator.getValidMaskGPU(1)))
+				{
+					Instance->poseEstimator.setParams(Instance->poseEstimator.getParamVector());
+					if (Instance->poseEstimator.apply(Instance->backProjector.getOutputGPU(0),
+						Instance->prevBackProjector.getOutputGPU(0),
+						Instance->normalCalculator.getOutputGPU(0),
+						Instance->prevNormalCalculator.getOutputGPU(0),
+						Instance->normalCalculator.getValidMaskGPU(0)))
+					{
+						std::cout << Instance->poseEstimator.getTransform() << std::endl;
+					}
+				}
+			}
+			
+			
+		}
+		
+		
+		//Instance->poseEstimator.apply(
 		//Normals CPU Calculation Comparison
 		/*if (Instance->backProjector.copyToCPU() && Instance->normalCalculator.copyToCPU()) {
 			vertices = Instance->backProjector.getOutputCPU(0);
@@ -184,7 +246,8 @@ public:
 
 			
 		}
-		
+		Instance->prevBackProjector.copy(&Instance->backProjector);
+		Instance->prevNormalCalculator.copy(&Instance->normalCalculator); 
 	}
 
 	static void update()
@@ -273,6 +336,7 @@ public:
 
 	void run()
 	{
+
 		int argc = 0;
 		char* arg0 = const_cast<char*>("Sensor Reading");
 		char* argv[] = { arg0 };
@@ -332,7 +396,13 @@ private:
 	Filterer filterer;
 	BackProjector backProjector;
 	NormalCalculator normalCalculator;
+	BackProjector prevBackProjector;
+	NormalCalculator prevNormalCalculator;
+	PoseEstimator poseEstimator;
+	PoseEstimator poseEstimatorFirstLevel;
+	PoseEstimator poseEstimatorSecondLevel;
 	bool isWritten = false;
+	int frameNumber = 0;
 };
 
 Visualizer* Visualizer::Instance = nullptr;

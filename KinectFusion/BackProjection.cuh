@@ -78,10 +78,10 @@ public:
 
 		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjected, input, m_width, m_height, m_f_X, m_f_Y, m_c_X, m_c_Y);
 		gridSize = dim3(m_width / 32, m_height / 32);
-		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjectedFirstLevel, inputFirstLevel, m_width/2, m_height/2, m_f_X, m_f_Y, m_c_X, m_c_Y);
+		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjectedFirstLevel, inputFirstLevel, m_width/2, m_height/2, m_f_X * 0.5f, m_f_Y * 0.5f, m_c_X * 0.5f, m_c_Y * 0.5f);
 		gridSize = dim3(m_width / 32, m_height / 32);
 		blockSize = dim3(8, 8);
-		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjectedSecondLevel, inputSecondLevel, m_width/4, m_height/4, m_f_X, m_f_Y, m_c_X, m_c_Y);
+		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjectedSecondLevel, inputSecondLevel, m_width/4, m_height/4, m_f_X * 0.25f, m_f_Y * 0.25f, m_c_X * 0.25f, m_c_Y * 0.25f);
 		return true;
 	}
 
@@ -129,10 +129,14 @@ public:
 		m_c_Y = c_Y;
 	}
 
+	void copy(BackProjector* currentBackProjector) 
+	{
+		cudaMemcpy(m_outputBackProjected, currentBackProjector->m_outputBackProjected, m_size, cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_outputBackProjectedFirstLevel, currentBackProjector->m_outputBackProjectedFirstLevel, m_size / 4, cudaMemcpyDeviceToDevice);
+		cudaMemcpy(m_outputBackProjectedSecondLevel, currentBackProjector->m_outputBackProjectedSecondLevel, m_size / 16, cudaMemcpyDeviceToDevice);
+	}
+
 private:
-	float* m_input;
-	float* m_inputFirstLevel;
-	float* m_inputSecondLevel;
 	
 	float* m_outputBackProjected;
 	float* m_outputBackProjectedFirstLevel;
@@ -141,14 +145,6 @@ private:
 	float* m_outputBackProjectedCPU;
 	float* m_outputBackProjectedFirstLevelCPU;
 	float* m_outputBackProjectedSecondLevelCPU;
-	
-	float* m_outputNormal;
-	float* m_outputNormalFirstLevel;
-	float* m_outputNormalSecondLevel;
-
-	float* m_outputNormalCPU;
-	float* m_outputNormalFirstLevelCPU;
-	float* m_outputNormalSecondLevelCPU;
 
 	cudaError_t m_cudaStatusInput;
 	cudaError_t m_cudaStatusOutput;

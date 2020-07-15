@@ -1,4 +1,4 @@
-#include "Visualizer.cuh"
+#include "Visualizer.h"
 
 int main()
 {  
