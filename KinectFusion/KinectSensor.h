@@ -129,6 +129,12 @@ class KinectSensor: public Sensor
 			}
 		}
 
+		// get current color data
+		BYTE* GetColorRGBX()
+		{
+			return nullptr;
+		}
+
 	private:
 		HANDLE colorStreamHandle = nullptr;
 		HANDLE depthStreamHandle = nullptr;

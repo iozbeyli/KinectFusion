@@ -38,14 +38,15 @@ public:
 		m_height = height;
 		m_size = 3 * width * height * sizeof(float);
 		
-
+		m_cudaStatusOutputUnfiltered = cudaMalloc((void**)&m_outputBackProjectedUnfiltered, m_size);
 		m_cudaStatusOutput = cudaMalloc((void**)&m_outputBackProjected, m_size);
 		m_cudaStatusOutputFirstLevel = cudaMalloc((void**)&m_outputBackProjectedFirstLevel, m_size / 4);
 		m_cudaStatusOutputSecondLevel = cudaMalloc((void**)&m_outputBackProjectedSecondLevel, m_size / 16);
+		m_outputBackProjectedUnfilteredCPU = (float*)malloc(m_size);
 		m_outputBackProjectedCPU = (float*)malloc(m_size);
 		m_outputBackProjectedFirstLevelCPU = (float*)malloc(m_size / 4);
 		m_outputBackProjectedSecondLevelCPU = (float*)malloc(m_size / 16);
-		if (m_cudaStatusInput != cudaSuccess && m_cudaStatusOutput != cudaSuccess && m_cudaStatusOutputFirstLevel != cudaSuccess && m_cudaStatusOutputSecondLevel != cudaSuccess)
+		if (m_cudaStatusInput != cudaSuccess && m_cudaStatusOutputUnfiltered!=cudaSuccess && m_cudaStatusOutput != cudaSuccess && m_cudaStatusOutputFirstLevel != cudaSuccess && m_cudaStatusOutputSecondLevel != cudaSuccess)
 		{
 			m_OK = false;
 		}
@@ -54,9 +55,11 @@ public:
 		}
 	}
 	~BackProjector() {
+		cudaFree(m_outputBackProjectedUnfiltered);
 		cudaFree(m_outputBackProjected);
 		cudaFree(m_outputBackProjectedFirstLevel);
 		cudaFree(m_outputBackProjectedSecondLevel);
+		free(m_outputBackProjectedUnfilteredCPU);
 		free(m_outputBackProjectedCPU);
 		free(m_outputBackProjectedFirstLevelCPU);
 		free(m_outputBackProjectedSecondLevelCPU);
@@ -67,7 +70,7 @@ public:
 		return m_OK;
 	}
 
-	bool apply(float* input, float* inputFirstLevel, float* inputSecondLevel)
+	bool apply(float* inputUnfiltered, float* input, float* inputFirstLevel, float* inputSecondLevel)
 	{
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
@@ -76,6 +79,7 @@ public:
 		float sigmaSpatial = 1.0f;
 		float sigmaRange = 1.0f;
 
+		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjectedUnfiltered, inputUnfiltered, m_width, m_height, m_f_X, m_f_Y, m_c_X, m_c_Y);
 		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjected, input, m_width, m_height, m_f_X, m_f_Y, m_c_X, m_c_Y);
 		gridSize = dim3(m_width / 32, m_height / 32);
 		applyBackProjection<<<gridSize, blockSize>>> (m_outputBackProjectedFirstLevel, inputFirstLevel, m_width/2, m_height/2, m_f_X * 0.5f, m_f_Y * 0.5f, m_c_X * 0.5f, m_c_Y * 0.5f);
@@ -87,6 +91,7 @@ public:
 
 	bool copyToCPU()
 	{
+		cudaError_t cudaStatusUnfiltered = cudaMemcpy(m_outputBackProjectedUnfilteredCPU, m_outputBackProjectedUnfiltered, m_size, cudaMemcpyDeviceToHost);
 		cudaError_t cudaStatus = cudaMemcpy(m_outputBackProjectedCPU, m_outputBackProjected, m_size, cudaMemcpyDeviceToHost);
 		cudaError_t cudaStatusFirstLevel = cudaMemcpy(m_outputBackProjectedFirstLevelCPU, m_outputBackProjectedFirstLevel, m_size / 4, cudaMemcpyDeviceToHost);
 		cudaError_t cudaStatusSecondLevel = cudaMemcpy(m_outputBackProjectedSecondLevelCPU, m_outputBackProjectedSecondLevel, m_size / 16, cudaMemcpyDeviceToHost);
@@ -98,6 +103,10 @@ public:
 	}
 
 	float* getOutputCPU(int level) {
+		if (level == -1)
+		{
+			return m_outputBackProjectedUnfilteredCPU;
+		}
 		if (level == 1)
 		{
 			return m_outputBackProjectedFirstLevelCPU;
@@ -110,6 +119,10 @@ public:
 	}
 
 	float* getOutputGPU(int level) {
+		if (level == -1)
+		{
+			return m_outputBackProjectedUnfiltered;
+		}
 		if (level == 1)
 		{
 			return m_outputBackProjectedFirstLevel;
@@ -131,22 +144,26 @@ public:
 
 	void copy(BackProjector* currentBackProjector) 
 	{
+		cudaMemcpy(m_outputBackProjectedUnfiltered, currentBackProjector->m_outputBackProjectedUnfiltered, m_size, cudaMemcpyDeviceToDevice);
 		cudaMemcpy(m_outputBackProjected, currentBackProjector->m_outputBackProjected, m_size, cudaMemcpyDeviceToDevice);
 		cudaMemcpy(m_outputBackProjectedFirstLevel, currentBackProjector->m_outputBackProjectedFirstLevel, m_size / 4, cudaMemcpyDeviceToDevice);
 		cudaMemcpy(m_outputBackProjectedSecondLevel, currentBackProjector->m_outputBackProjectedSecondLevel, m_size / 16, cudaMemcpyDeviceToDevice);
 	}
 
 private:
-	
+
+	float* m_outputBackProjectedUnfiltered;
 	float* m_outputBackProjected;
 	float* m_outputBackProjectedFirstLevel;
 	float* m_outputBackProjectedSecondLevel;
 	
+	float* m_outputBackProjectedUnfilteredCPU;
 	float* m_outputBackProjectedCPU;
 	float* m_outputBackProjectedFirstLevelCPU;
 	float* m_outputBackProjectedSecondLevelCPU;
 
 	cudaError_t m_cudaStatusInput;
+	cudaError_t m_cudaStatusOutputUnfiltered;
 	cudaError_t m_cudaStatusOutput;
 	cudaError_t m_cudaStatusOutputFirstLevel;
 	cudaError_t m_cudaStatusOutputSecondLevel;

@@ -278,6 +278,10 @@ private:
 			m_handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N,
 			n, k, &alpha, m_A, n, &beta, m_AtA, n
 		);*/
+		if (status != CUBLAS_STATUS_SUCCESS)
+		{
+			return false;
+		}
 
 		status = cublasSgemv(
 			m_handle, CUBLAS_OP_N,

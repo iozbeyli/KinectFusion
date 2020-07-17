@@ -28,7 +28,7 @@ class Visualizer
 {
 public:
 
-	Visualizer(int skip = 1) :	sensor(skip), 
+	Visualizer(int skip = 2) :	sensor(skip), 
 								filterer(640,480), 
 								backProjector(640, 480), 
 								normalCalculator(640, 480), 
@@ -83,7 +83,7 @@ public:
 		}
 
 		backProjector.setIntrinsics(sensor.GetFX(), sensor.GetFY(), sensor.GetCX(), sensor.GetCY());
-
+		currentTransform = Matrix4f::Identity();
 	}
 
 	static Visualizer* getInstance() {
@@ -112,10 +112,10 @@ public:
 		float* normalsSecondLevel;
 		Instance->frameNumber++;
 		Instance->filterer.applyFilter(Instance->depthImage);
-		Instance->backProjector.apply(Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
-		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
+		Instance->backProjector.apply(Instance->filterer.getInputGPU(),Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
+		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
-		if (Instance->frameNumber > 1)
+		if (Instance->frameNumber > 1 && Instance->frameNumber < 50 )
 		{
 			std::cout << Instance->frameNumber << std::endl;
 			Instance->poseEstimatorSecondLevel.resetParams();
@@ -140,12 +140,15 @@ public:
 						Instance->normalCalculator.getValidMaskGPU(0)))
 					{
 						std::cout << Instance->poseEstimator.getTransform() << std::endl;
+						Instance->currentTransform = Instance->currentTransform * Instance->poseEstimator.getTransform();
+						std::cout << Instance->sensor.GetTrajectory() << std::endl;
+						std::cout << Instance->sensor.GetTrajectory().inverse() << std::endl;
 					}
 				}
 			}
 			
 			
-		}
+		
 		
 		
 		//Instance->poseEstimator.apply(
@@ -160,13 +163,12 @@ public:
 			std::cout << "Error: " << calculateNormalError(normals, vertices, 640, 480) << std::endl;
 		}*/
 		
-		/* Writing Point Cloud to .off
-		if (!Instance->isWritten)
-		{
+		//Writing Point Cloud to .off
+		
 			std::cout << Instance->isWritten << std::endl;
 			Instance->isWritten = true;
 			if (Instance->backProjector.copyToCPU()) {
-				std::ofstream outFile("./vertices.off");
+				std::ofstream outFile("./vertices"+std::to_string(Instance->frameNumber)+".off");
 				if (!outFile.is_open()) return exit(1);
 				outFile << "COFF" << std::endl;
 				outFile << 480 * 640 << " " << 0 << " 0" << std::endl;
@@ -178,20 +180,25 @@ public:
 					int index = 3 * i;
 					if (isinf(vertices[index])) 
 					{
-						outFile << 0 << " " << 0 << " " << 0 << std::endl;
+						outFile << 0 << " " << 0 << " " << 0 << " " << 255 << " " << 255 << " " << 255 << " " << 255 << std::endl;
 					}
 					else
 					{
 						int color = std::fmin(((std::fmax(vertices[index + 2], 0) / 5) * 255),255);
-						outFile << vertices[index] << " " << vertices[index + 1] << " " << vertices[index + 2] << " "
-							<< color << " " << color << " " << color << " " << 255 << std::endl;
+						Vector4f vertex = Instance->currentTransform * Vector4f(vertices[index], vertices[index + 1], vertices[index + 2], 1.0f);
+						outFile << vertex[0] << " " << vertex[1] << " " << vertex[2] << " "
+							<< (int)Instance->colorMap[i * 4] << " " << (int)Instance->colorMap[i * 4+1] << " " << (int)Instance->colorMap[i * 4+2] << " " << (int)Instance->colorMap[i * 4+3] << std::endl;
 					}
 				}
 				outFile.close();
 			}
-		}*/
 		
 		
+		}
+		else if(Instance->frameNumber>10)
+		{
+			exit(0);
+		}
 		
 		if (Instance->filterer.copyToCPU()) 
 		{
@@ -255,6 +262,7 @@ public:
 		if (Instance->sensor.ProcessNextFrame())
 		{
 			Instance->depthImage = Instance->sensor.GetDepth();
+			Instance->colorMap = Instance->sensor.GetColorRGBX();
 			updateImageFrame();
 		}
 		glutPostRedisplay();
@@ -388,6 +396,8 @@ private:
 	TextureObject* depthTextureSecondLevel = nullptr;
 	TextureObject* depthTextureUnfiltered = nullptr;
 	float* depthImage;
+	float* depthImageRaw;
+	BYTE* colorMap;
 	#if KINECT
 		KinectSensor sensor;
 	#else
@@ -403,6 +413,7 @@ private:
 	PoseEstimator poseEstimatorSecondLevel;
 	bool isWritten = false;
 	int frameNumber = 0;
+	Matrix4f currentTransform;
 };
 
 Visualizer* Visualizer::Instance = nullptr;
