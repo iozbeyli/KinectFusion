@@ -13,4 +13,5 @@ class Sensor {
 		virtual float GetFY() = 0;
 		virtual float GetCX() = 0;
 		virtual float GetCY() = 0;
+		virtual BYTE* GetColorRGBX() = 0;
 };

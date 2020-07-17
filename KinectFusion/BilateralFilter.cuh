@@ -180,6 +180,11 @@ public:
 		return m_outputMap;
 	}
 
+	float* getInputGPU()
+	{
+		return m_inputMap;
+	}
+
 private:
 	float* m_inputMap;
 	float* m_outputMap;
