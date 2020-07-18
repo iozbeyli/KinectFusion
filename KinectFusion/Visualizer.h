@@ -132,7 +132,7 @@ public:
 					Instance->prevNormalCalculator.getOutputGPU(1),
 					Instance->normalCalculator.getValidMaskGPU(1)))
 				{
-					Instance->poseEstimator.setParams(Instance->poseEstimator.getParamVector());
+					Instance->poseEstimator.setParams(Instance->poseEstimatorFirstLevel.getParamVector());
 					if (Instance->poseEstimator.apply(Instance->backProjector.getOutputGPU(0),
 						Instance->prevBackProjector.getOutputGPU(0),
 						Instance->normalCalculator.getOutputGPU(0),
