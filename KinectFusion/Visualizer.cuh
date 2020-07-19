@@ -16,6 +16,10 @@
 #include "NormalCalculation.cuh"
 #include "NormalCalculationEigen.h"
 #include "PoseEstimator.cuh"
+#include "Volume.cuh"
+#include "Tsdf.cuh"
+#include "GlobalModel.cuh"
+#include "Raycaster.cuh"
 
 #define KINECT 0;
 
@@ -27,7 +31,11 @@ class Visualizer
 {
 public:
 
-	Visualizer(int skip = 1) : sensor(skip), filterer(640,480), backProjector(640, 480), normalCalculator(640, 480)
+	Visualizer(int skip = 1) : sensor(skip), filterer(640, 480), backProjector(640, 480), normalCalculator(640, 480)
+		, volume(640, 480, 30, 512, 2, 100)
+		, tsdf{}
+		, model(640, 480)
+		, raycaster{}
 	{
 		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
 		
@@ -56,7 +64,21 @@ public:
 		}
 
 		backProjector.setIntrinsics(sensor.GetFX(), sensor.GetFY(), sensor.GetCX(), sensor.GetCY());
+		volume.setIntrinsics(sensor.GetFX(), sensor.GetFY(), sensor.GetCX(), sensor.GetCY());
 
+		if (!volume.isOk())
+		{
+			std::cerr << "Failed to initialize the volume for calculating the truncated signed distance field!\nCheck your gpu memory!" << std::endl;
+			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(volume.status()) << std::endl;
+			exit(1);
+		}
+
+		if (!model.isOk())
+		{
+			std::cerr << "Failed to initialize the global model needed for raycasting!\nCheck your gpu memory!" << std::endl;
+			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(model.status()) << std::endl;
+			exit(1);
+		}
 	}
 
 	static Visualizer* getInstance() {
@@ -129,8 +151,53 @@ public:
 			}
 		}*/
 		
+
+		Instance->tsdf.apply(Instance->volume, Instance->filterer.getInputGPU(), Instance->sensor.GetColorRGBX(), Instance->sensor.GetTrajectory());
+
+		if (!Instance->tsdf.isOk())
+		{
+			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->tsdf.status()) << std::endl;
+			exit(1);
+		}
+
+		Instance->raycaster.apply(Instance->volume, Instance->model, Instance->sensor.GetTrajectory());
 		
+		if (!Instance->raycaster.isOk())
+		{
+			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->raycaster.status()) << std::endl;
+			exit(1);
+		}
+
+		if (Instance->model.copyToCPU())
+		{
+			BYTE* rgba = Instance->model.getColorMapCPU();
+
+			for (int y = 0; y < Instance->model.FRAME_HEIGHT; ++y)
+			{
+				for (int x = 0; x < Instance->model.FRAME_WIDTH; ++x)
+				{
+					const UINT TEXTURE_IDX = (y * Instance->model.FRAME_WIDTH + x) * 3;
+					const UINT FRAME_IDX = (y * Instance->model.FRAME_WIDTH + x) * 4;
+
+					//Instance->colorTexture->bits[TEXTURE_IDX + 0] = 128;
+					//Instance->colorTexture->bits[TEXTURE_IDX + 1] = 64;
+					//Instance->colorTexture->bits[TEXTURE_IDX + 2] = 64;
+
+					BYTE r = rgba[FRAME_IDX + 0];
+					BYTE g = rgba[FRAME_IDX + 1];
+					BYTE b = rgba[FRAME_IDX + 2];
+					Instance->colorTexture->bits[TEXTURE_IDX + 0] = r;
+					Instance->colorTexture->bits[TEXTURE_IDX + 1] = g;
+					Instance->colorTexture->bits[TEXTURE_IDX + 2] = b;
+				}
+			}
 		
+			TextureObject* tobj = Instance->colorTexture;
+			glBindTexture(GL_TEXTURE_2D, tobj->id);
+			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);
+		}
+
+		/*
 		if (Instance->filterer.copyToCPU()) 
 		{
 			image=Instance->filterer.getOutputCPU(0);
@@ -184,7 +251,7 @@ public:
 
 			
 		}
-		
+		*/
 	}
 
 	static void update()
@@ -197,7 +264,7 @@ public:
 		glutPostRedisplay();
 	}
 
-	static void render()
+	static void render_old()
 	{
 		glClearColor(.0f, .0f, .0f, .0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -245,6 +312,37 @@ public:
 		glutSwapBuffers();
 	}
 
+	static void render()
+	{
+		glClearColor(.0f, .0f, .0f, .0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glEnable(GL_TEXTURE_2D);
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+
+		GLfloat vertices[][3] =
+		{
+			{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+			{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}
+		};
+
+		GLfloat textcoords[][2] =
+		{
+			{0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f}
+		};
+
+		VertexData meshData = { &(vertices[0][0]), NULL, NULL, &(textcoords[0][0]) };
+
+		glBindTexture(GL_TEXTURE_2D, Instance->colorTexture->id);
+		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+
+		glutSwapBuffers();
+	}
+
+
 	static void reshape(int w, int h)
 	{
 		glViewport(0, 0, w, h);
@@ -279,7 +377,7 @@ public:
 
 		glutInit(&argc, argv);
 		glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
-		glutInitWindowSize(1280, 240);
+		glutInitWindowSize(640, 480);
 		glutCreateWindow("Sensor Reading");
 		// glutFullScreen();
 
@@ -332,6 +430,10 @@ private:
 	Filterer filterer;
 	BackProjector backProjector;
 	NormalCalculator normalCalculator;
+	Volume volume;
+	Tsdf tsdf;
+	GlobalModel model;
+	Raycaster raycaster;
 	bool isWritten = false;
 };
 

@@ -174,7 +174,7 @@ public:
 
 	auto getParamVector()
 	{
-		return Vector6f(m_rX, m_rY, m_rZ, m_tX, m_tY, m_tZ);
+		// return Vector6f(m_rX, m_rY, m_rZ, m_tX, m_tY, m_tZ);
 	}
 
 	void apply(float* depthPoints, float* normals)

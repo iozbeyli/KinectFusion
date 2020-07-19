@@ -54,6 +54,18 @@
     <ClInclude Include="PoseEstimator.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Tsdf.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Volume.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Raycaster.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GlobalModel.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp">

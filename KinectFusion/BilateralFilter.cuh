@@ -167,6 +167,11 @@ public:
 		return m_outputMapCPU;
 	}
 
+	float* getInputGPU()
+	{
+		return m_inputMap;
+	}
+
 	float* getOutputGPU(int level)
 	{
 		if (level == 1)
