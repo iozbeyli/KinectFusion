@@ -74,7 +74,7 @@ void applyRaycaster
 	const int voxelCountX,
 	const int voxelCountY,
 	const int voxelCountZ,
-	const int voxelSize,
+	const float voxelSize,
 	const float fovX,
 	const float fovY,
 	const float fovCenterX,
@@ -137,9 +137,9 @@ void applyRaycaster
 	// SJ: Find Voxel coordinates
 	int3 voxelCoords = make_int3(rayPos.x / voxelSize, rayPos.y / voxelSize, rayPos.z / voxelSize);
 
-	if (voxelCoords.x > voxelCountX || voxelCoords.x < 0 ||
-		voxelCoords.y > voxelCountY || voxelCoords.y < 0 ||
-		voxelCoords.z > voxelCountZ || voxelCoords.z < 0)
+	if (voxelCoords.x >= voxelCountX || voxelCoords.x < 0 ||
+		voxelCoords.y >= voxelCountY || voxelCoords.y < 0 ||
+		voxelCoords.z >= voxelCountZ || voxelCoords.z < 0)
 		return;
 
 	const UINT VOXEL_IDX = (voxelCountX * voxelCountY * voxelCoords.z) + (voxelCountX * voxelCoords.y) + voxelCoords.x;
@@ -169,9 +169,9 @@ void applyRaycaster
 		int3 voxelCoords = make_int3(rayPos.x / voxelSize, rayPos.y / voxelSize, rayPos.z / voxelSize);
 
 		// SJ: Double check if the coordiantes are valid.
-		if (voxelCoords.x > voxelCountX || voxelCoords.x < 0 ||
-			voxelCoords.y > voxelCountY || voxelCoords.y < 0 ||
-			voxelCoords.z > voxelCountZ || voxelCoords.z < 0)
+		if (voxelCoords.x >= voxelCountX || voxelCoords.x < 0 ||
+			voxelCoords.y >= voxelCountY || voxelCoords.y < 0 ||
+			voxelCoords.z >= voxelCountZ || voxelCoords.z < 0)
 			continue;
 
 		// SJ: Get the voxel sdf from the voxel coordiantes, and check if we had a zero crosssing.
@@ -191,7 +191,7 @@ void applyRaycaster
 			gpuColorMap[FRAME_COLOR_IDX + 0] = colors[VOXEL_COLOR_IDX + 0];
 			gpuColorMap[FRAME_COLOR_IDX + 1] = colors[VOXEL_COLOR_IDX + 1];
 			gpuColorMap[FRAME_COLOR_IDX + 2] = colors[VOXEL_COLOR_IDX + 2];
-			gpuColorMap[FRAME_COLOR_IDX + 3] = 1;
+			gpuColorMap[FRAME_COLOR_IDX + 3] = 255;
 
 			// SJ: TODO: set vertices and normals.
 			return;

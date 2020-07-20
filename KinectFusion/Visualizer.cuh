@@ -32,7 +32,7 @@ class Visualizer
 public:
 
 	Visualizer(int skip = 1) : sensor(skip), filterer(640, 480), backProjector(640, 480), normalCalculator(640, 480)
-		, volume(640, 480, 30, 512, 2, 100)
+		, volume(640, 480, 0.15, 500, 0.01, 100)
 		, tsdf{}
 		, model(640, 480)
 		, raycaster{}

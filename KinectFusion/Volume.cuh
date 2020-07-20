@@ -17,7 +17,7 @@ public:
 	const UINT VOXEL_COUNT_X;
 	const UINT VOXEL_COUNT_Y;
 	const UINT VOXEL_COUNT_Z;
-	const UINT VOXEL_SIZE;
+	const float VOXEL_SIZE;
 	const float VOXEL_MAX_WEIGHT;
 	float FOV_X;
 	float FOV_Y;
@@ -25,7 +25,7 @@ public:
 	float CENTER_FOV_Y;
 
 	Volume(const UINT frameWidth, const UINT frameHeight, const float truncation, const UINT voxelCount,
-		const UINT voxelSize, const float voxelMaxWeight)
+		const float voxelSize, const float voxelMaxWeight)
 		: FRAME_WIDTH{ frameWidth }
 		, FRAME_HEIGHT{ frameHeight }
 		, TRUNCATION{ truncation }
@@ -81,12 +81,6 @@ public:
 		FOV_Y = f_Y;
 		CENTER_FOV_X = c_X;
 		CENTER_FOV_Y = c_Y;
-	}
-
-	bool copyToCPU()
-	{
-
-		return true;
 	}
 
 	cudaError_t status()
