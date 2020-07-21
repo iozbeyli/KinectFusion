@@ -16,10 +16,15 @@
 #include "NormalCalculation.cuh"
 #include "NormalCalculationEigen.h"
 #include "PoseEstimator.cuh"
-#include "Volume.cuh"
+#include "TsdfVolume.cuh"
 #include "Tsdf.cuh"
 #include "GlobalModel.cuh"
 #include "Raycaster.cuh"
+
+// Exercise MarchingCubes
+#include "Volume.h"
+#include "SimpleMesh.h"
+#include "MarchingCubes.h"
 
 #define KINECT 0;
 
@@ -160,98 +165,105 @@ public:
 			exit(1);
 		}
 
-		Instance->raycaster.apply(Instance->volume, Instance->model, Instance->sensor.GetTrajectory());
-		
-		if (!Instance->raycaster.isOk())
+		Instance->frameCount++;
+		std::cout << "Frame: " << Instance->frameCount << std::endl;
+		if (Instance->frameCount == 1)
 		{
-			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->raycaster.status()) << std::endl;
-			exit(1);
+			std::cout << "Exporting Mesh ..." << std::endl;
+			exportMesh();
+			std::cout << "Finished!" << std::endl;
+			exit(0);
 		}
 
-		if (Instance->model.copyToCPU())
+		if (false)
 		{
-			BYTE* rgba = Instance->model.getColorMapCPU();
+			Instance->raycaster.apply(Instance->volume, Instance->model, Instance->sensor.GetTrajectory());
 
-			for (int y = 0; y < Instance->model.FRAME_HEIGHT; ++y)
+			if (!Instance->raycaster.isOk())
 			{
-				for (int x = 0; x < Instance->model.FRAME_WIDTH; ++x)
-				{
-					const UINT TEXTURE_IDX = (y * Instance->model.FRAME_WIDTH + x) * 3;
-					const UINT FRAME_IDX = (y * Instance->model.FRAME_WIDTH + x) * 4;
-
-					//Instance->colorTexture->bits[TEXTURE_IDX + 0] = 128;
-					//Instance->colorTexture->bits[TEXTURE_IDX + 1] = 64;
-					//Instance->colorTexture->bits[TEXTURE_IDX + 2] = 64;
-
-					BYTE r = rgba[FRAME_IDX + 0];
-					BYTE g = rgba[FRAME_IDX + 1];
-					BYTE b = rgba[FRAME_IDX + 2];
-					Instance->colorTexture->bits[TEXTURE_IDX + 0] = r;
-					Instance->colorTexture->bits[TEXTURE_IDX + 1] = g;
-					Instance->colorTexture->bits[TEXTURE_IDX + 2] = b;
-				}
-			}
-		
-			TextureObject* tobj = Instance->colorTexture;
-			glBindTexture(GL_TEXTURE_2D, tobj->id);
-			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);
-		}
-
-		/*
-		if (Instance->filterer.copyToCPU()) 
-		{
-			image=Instance->filterer.getOutputCPU(0);
-			imageFirstLevel = Instance->filterer.getOutputCPU(1);
-			imageSecondLevel = Instance->filterer.getOutputCPU(2);	
-			for (int y = 0; y < 480; ++y)
-			{
-				for (int x = 0; x < 640; ++x)
-				{
-					int index = (y * 640 + x);
-					unsigned char* ptr = Instance->depthTexture->bits + index;
-					unsigned char* ptrUnfiltered = Instance->depthTextureUnfiltered->bits + index;
-					float current = (std::fmaxf(image[index], 0) / 5) * 255;
-					float currentUnfiltered = (std::fmaxf(Instance->depthImage[index], 0) / 5) * 255;
-					//float currentUnfiltered = std::fabsf(((std::fmaxf(Instance->depthImage[index], 0) / 5) * 255)- current );
-					*ptr = (unsigned char)std::fminf(current, 255);
-					*ptrUnfiltered = (unsigned char)std::fminf(currentUnfiltered, 255);
-
-					if (x < 320 && y < 240) 
-					{
-						int indexFirstLevel = (y * 320 + x);
-						unsigned char* ptrFirstLevel = Instance->depthTextureFirstLevel->bits + indexFirstLevel;
-						float currentFirstLevel = (std::fmaxf(imageFirstLevel[indexFirstLevel], 0) / 5) * 255;
-						*ptrFirstLevel = (unsigned char)std::fminf(currentFirstLevel, 255);
-					}
-					if (x < 160 && y < 120) 
-					{
-						int indexSecondLevel = (y * 160 + x);
-						unsigned char* ptrSecondLevel = Instance->depthTextureSecondLevel->bits + indexSecondLevel;
-						float currentSecondLevel = (std::fmaxf(imageSecondLevel[indexSecondLevel], 0) / 5) * 255;
-						*ptrSecondLevel = (unsigned char)std::fminf(currentSecondLevel, 255);
-					}
-				}
+				std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->raycaster.status()) << std::endl;
+				exit(1);
 			}
 
-			TextureObject* tobjUnfiltered = Instance->depthTextureUnfiltered;
-			glBindTexture(GL_TEXTURE_2D, tobjUnfiltered->id);
-			glTexImage2D(GL_TEXTURE_2D, 0, tobjUnfiltered->internalFormat, tobjUnfiltered->width, tobjUnfiltered->height, 0, tobjUnfiltered->imageFormat, GL_UNSIGNED_BYTE, tobjUnfiltered->bits);
+			if (Instance->model.copyToCPU())
+			{
+				BYTE* rgba = Instance->model.getColorMapCPU();
 
-			TextureObject* tobj = Instance->depthTexture;
-			glBindTexture(GL_TEXTURE_2D, tobj->id);
-			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);
+				for (int y = 0; y < Instance->model.FRAME_HEIGHT; ++y)
+				{
+					for (int x = 0; x < Instance->model.FRAME_WIDTH; ++x)
+					{
+						const UINT TEXTURE_IDX = (y * Instance->model.FRAME_WIDTH + x) * 3;
+						const UINT FRAME_IDX = (y * Instance->model.FRAME_WIDTH + x) * 4;
 
-			TextureObject* tobjFirstLevel = Instance->depthTextureFirstLevel;
-			glBindTexture(GL_TEXTURE_2D, tobjFirstLevel->id);
-			glTexImage2D(GL_TEXTURE_2D, 0, tobjFirstLevel->internalFormat, tobjFirstLevel->width, tobjFirstLevel->height, 0, tobjFirstLevel->imageFormat, GL_UNSIGNED_BYTE, tobjFirstLevel->bits);
+						//Instance->colorTexture->bits[TEXTURE_IDX + 0] = 128;
+						//Instance->colorTexture->bits[TEXTURE_IDX + 1] = 64;
+						//Instance->colorTexture->bits[TEXTURE_IDX + 2] = 64;
 
-			TextureObject* tobjSecondLevel = Instance->depthTextureSecondLevel;
-			glBindTexture(GL_TEXTURE_2D, tobjSecondLevel->id);
-			glTexImage2D(GL_TEXTURE_2D, 0, tobjSecondLevel->internalFormat, tobjSecondLevel->width, tobjSecondLevel->height, 0, tobjSecondLevel->imageFormat, GL_UNSIGNED_BYTE, tobjSecondLevel->bits);
+						BYTE r = rgba[FRAME_IDX + 0];
+						BYTE g = rgba[FRAME_IDX + 1];
+						BYTE b = rgba[FRAME_IDX + 2];
+						Instance->colorTexture->bits[TEXTURE_IDX + 0] = r;
+						Instance->colorTexture->bits[TEXTURE_IDX + 1] = g;
+						Instance->colorTexture->bits[TEXTURE_IDX + 2] = b;
+					}
+				}
 
-			
+				TextureObject* tobj = Instance->colorTexture;
+				glBindTexture(GL_TEXTURE_2D, tobj->id);
+				glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);
+			}
 		}
-		*/
+	}
+
+	static void exportMesh()
+	{
+		if (!Instance->volume.copyToCPU())
+			return;
+
+		std::string filenameOut{ "tsdf.off" };
+
+		unsigned int mc_res = 500; // resolution of the grid, for debugging you can reduce the resolution (-> faster)
+		Volume vol(Vector3d(-2.5, -2.5, -2.5), Vector3d(2.5, 2.5, 2.5), mc_res, mc_res, mc_res, 1);
+
+		std::cout << vol.getDimX() << " " << vol.getDimY() << " " << vol.getDimY() << std::endl;
+		
+		for (unsigned int x = 0; x < vol.getDimX(); x++)
+		{
+			for (unsigned int y = 0; y < vol.getDimY(); y++)
+			{
+				for (unsigned int z = 0; z < vol.getDimZ(); z++)
+				{
+					Eigen::Vector3d p = vol.pos(x, y, z);
+					// set value from tsdf Voume
+					const int voxelCount = Instance->volume.VOXEL_COUNT_X;
+					const UINT VOLUME_IDX = (voxelCount * voxelCount * z) + (voxelCount * y) + x;
+					double val = Instance->volume.cpuSdf[VOLUME_IDX];
+					vol.set(x, y, z, val);
+				}
+			}
+		}
+
+		// extract the zero iso-surface using marching cubes
+		SimpleMesh mesh;
+		for (unsigned int x = 0; x < vol.getDimX() - 1; x++)
+		{
+			// std::cerr << "Marching Cubes on slice " << x << " of " << vol.getDimX() << std::endl;
+
+			for (unsigned int y = 0; y < vol.getDimY() - 1; y++)
+			{
+				for (unsigned int z = 0; z < vol.getDimZ() - 1; z++)
+				{
+					ProcessVolumeCell(&vol, x, y, z, 0.00f, &mesh);
+				}
+			}
+		}
+
+		// write mesh to file
+		if (!mesh.WriteMesh(filenameOut))
+		{
+			std::cout << "ERROR: unable to write output file!" << std::endl;
+		}
 	}
 
 	static void update()
@@ -430,11 +442,12 @@ private:
 	Filterer filterer;
 	BackProjector backProjector;
 	NormalCalculator normalCalculator;
-	Volume volume;
+	TsdfVolume volume;
 	Tsdf tsdf;
 	GlobalModel model;
 	Raycaster raycaster;
 	bool isWritten = false;
+	UINT frameCount{ 0 };
 };
 
 Visualizer* Visualizer::Instance = nullptr;

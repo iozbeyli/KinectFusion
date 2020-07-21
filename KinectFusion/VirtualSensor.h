@@ -96,6 +96,10 @@ public:
 		FreeImageU16F dImage;
 		dImage.LoadImageFromFile(m_baseDir + m_filenameDepthImages[m_currentIdx]);
 
+		std::cout << "Loading Files: " << std::endl;
+		std::cout << m_filenameColorImages[m_currentIdx] << std::endl;
+		std::cout << m_filenameDepthImages[m_currentIdx] << std::endl;
+
 		for (unsigned int i = 0; i < m_depthImageWidth * m_depthImageHeight; ++i)
 		{
 			if (dImage.data[i] == 0)

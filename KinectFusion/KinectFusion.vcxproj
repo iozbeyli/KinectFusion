@@ -100,21 +100,25 @@
     <ClInclude Include="GlobalModel.cuh" />
     <ClInclude Include="GLUtilities.h" />
     <ClInclude Include="KinectSensor.h" />
+    <ClInclude Include="MarchingCubes.h" />
     <ClInclude Include="NormalCalculation.cuh" />
     <ClInclude Include="NormalCalculationEigen.h" />
     <ClInclude Include="PoseEstimator.cuh" />
     <ClInclude Include="Raycaster.cuh" />
     <ClInclude Include="Sensor.h" />
+    <ClInclude Include="SimpleMesh.h" />
     <ClInclude Include="TextureManager.h" />
     <ClInclude Include="Tsdf.cuh" />
     <ClInclude Include="VirtualSensor.h" />
     <ClInclude Include="Visualizer.cuh" />
-    <ClInclude Include="Volume.cuh" />
+    <ClInclude Include="TsdfVolume.cuh" />
+    <ClInclude Include="Volume.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp" />
     <ClCompile Include="GLUtilities.cpp" />
     <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="Volume.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -57,15 +57,18 @@
     <ClInclude Include="Tsdf.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Volume.cuh">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Raycaster.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GlobalModel.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TsdfVolume.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MarchingCubes.h" />
+    <ClInclude Include="SimpleMesh.h" />
+    <ClInclude Include="Volume.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp">
@@ -77,5 +80,6 @@
     <ClCompile Include="TextureManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Volume.cpp" />
   </ItemGroup>
 </Project>

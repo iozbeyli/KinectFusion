@@ -4,12 +4,14 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-class Volume
+class TsdfVolume
 {
 public:
 	float* sdf;
 	float* weights;
 	BYTE* colors;
+	
+	float* cpuSdf;
 
 	const UINT FRAME_WIDTH;
 	const UINT FRAME_HEIGHT;
@@ -24,7 +26,7 @@ public:
 	float CENTER_FOV_X;
 	float CENTER_FOV_Y;
 
-	Volume(const UINT frameWidth, const UINT frameHeight, const float truncation, const UINT voxelCount,
+	TsdfVolume(const UINT frameWidth, const UINT frameHeight, const float truncation, const UINT voxelCount,
 		const float voxelSize, const float voxelMaxWeight)
 		: FRAME_WIDTH{ frameWidth }
 		, FRAME_HEIGHT{ frameHeight }
@@ -68,6 +70,8 @@ public:
 			return;
 
 		cudaStatus = cudaMemset((void*)colors, 0, VOLUME_COLOR_SIZE);
+
+		cpuSdf = (float*)malloc(VOLUME_SIZE);
 	}
 
 	bool isOk()
@@ -83,12 +87,20 @@ public:
 		CENTER_FOV_Y = c_Y;
 	}
 
+	bool copyToCPU()
+	{
+		const size_t VOLUME_SIZE = VOXEL_COUNT_X * VOXEL_COUNT_Y * VOXEL_COUNT_Z * sizeof(float);
+
+		cudaStatus = cudaMemcpy(cpuSdf, sdf, VOLUME_SIZE, cudaMemcpyDeviceToHost);
+		return cudaStatus == cudaSuccess;
+	}
+
 	cudaError_t status()
 	{
 		return cudaStatus;
 	}
 
-	~Volume()
+	~TsdfVolume()
 	{
 		cudaFree(sdf);
 		cudaFree(weights);
