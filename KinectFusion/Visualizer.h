@@ -17,6 +17,13 @@
 #include "NormalCalculationEigen.h"
 #include "PoseEstimator.cuh"
 
+#include "TsdfVolume.cuh"
+#include "Tsdf.cuh"
+
+#include "Volume.h"
+#include "SimpleMesh.h"
+#include "MarchingCubes.h"
+
 
 #define KINECT 0;
 
@@ -36,7 +43,9 @@ public:
 								prevBackProjector(640, 480), 
 								prevNormalCalculator(640, 480),
 								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
-								poseEstimatorSecondLevel(160, 120, 4, 0.25f)
+								poseEstimatorSecondLevel(160, 120, 4, 0.25f),
+								volume(640, 480, 0.06, 500, 0.01, 2),
+								tsdf{}
 	{
 		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
 		
@@ -84,6 +93,15 @@ public:
 
 		backProjector.setIntrinsics(sensor.GetFX(), sensor.GetFY(), sensor.GetCX(), sensor.GetCY());
 		currentTransform = Matrix4f::Identity();
+
+		volume.setIntrinsics(sensor.GetFX(), sensor.GetFY(), sensor.GetCX(), sensor.GetCY());
+
+		if (!volume.isOk())
+		{
+			std::cerr << "Failed to initialize the volume for calculating the truncated signed distance field!\nCheck your gpu memory!" << std::endl;
+			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(volume.status()) << std::endl;
+			exit(1);
+		}
 	}
 
 	static Visualizer* getInstance() {
@@ -115,7 +133,7 @@ public:
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(),Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
-		if (Instance->frameNumber > 1 && Instance->frameNumber < 50 )
+		if (Instance->frameNumber > 0 && Instance->frameNumber < 400 )
 		{
 			std::cout << Instance->frameNumber << std::endl;
 			Instance->poseEstimatorSecondLevel.resetParams();
@@ -165,6 +183,7 @@ public:
 		
 		//Writing Point Cloud to .off
 		
+			/*
 			std::cout << Instance->isWritten << std::endl;
 			Instance->isWritten = true;
 			if (Instance->backProjector.copyToCPU()) {
@@ -192,12 +211,22 @@ public:
 				}
 				outFile.close();
 			}
-		
-		
-		}
-		else if(Instance->frameNumber>10)
-		{
-			exit(0);
+			*/
+
+			Instance->tsdf.apply(Instance->volume, Instance->filterer.getInputGPU(), Instance->sensor.GetColorRGBX(), Instance->currentTransform);
+			if (!Instance->tsdf.isOk())
+			{
+				std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->tsdf.status()) << std::endl;
+				exit(1);
+			}
+
+			if (Instance->frameNumber == 100)
+			{
+				std::cout << "Exporting Mesh ..." << std::endl;
+				exportMesh();
+				std::cout << "Finished!" << std::endl;
+				exit(0);
+			}
 		}
 		
 		if (Instance->filterer.copyToCPU()) 
@@ -255,6 +284,75 @@ public:
 		}
 		Instance->prevBackProjector.copy(&Instance->backProjector);
 		Instance->prevNormalCalculator.copy(&Instance->normalCalculator); 
+
+	}
+
+	static void exportMesh()
+	{
+		if (!Instance->volume.copyToCPU())
+			return;
+
+		std::string filenameOut{ "tsdf.off" };
+
+		unsigned int mc_res = 500; // resolution of the grid, for debugging you can reduce the resolution (-> faster)
+		Volume vol(Vector3d(-5, -5, -5), Vector3d(5, 5, 5), mc_res, mc_res, mc_res, 1);
+
+		std::cout << vol.getDimX() << " " << vol.getDimY() << " " << vol.getDimY() << std::endl;
+
+		UINT infcount = 0;
+		UINT nancount = 0;
+
+		for (unsigned int x = 0; x < vol.getDimX(); x++)
+		{
+			for (unsigned int y = 0; y < vol.getDimY(); y++)
+			{
+				for (unsigned int z = 0; z < vol.getDimZ(); z++)
+				{
+					Eigen::Vector3d p = vol.pos(x, y, z);
+					// set value from tsdf Voume
+					const int voxelCount = Instance->volume.VOXEL_COUNT_X;
+					const UINT VOLUME_IDX = (voxelCount * voxelCount * z) + (voxelCount * y) + x;
+
+					double val = Instance->volume.cpuSdf[VOLUME_IDX];
+
+					if (isinf(val))
+						infcount++;
+
+					if (isnan(val))
+						nancount++;
+
+					vol.set(x, y, z, val);
+				}
+			}
+		}
+
+		std::cout << "Infinity values: " << infcount << " NAN values: " << nancount << std::endl;
+
+		// extract the zero iso-surface using marching cubes
+		SimpleMesh mesh;
+		for (unsigned int x = 0; x < vol.getDimX() - 1; x++)
+		{
+			// std::cerr << "Marching Cubes on slice " << x << " of " << vol.getDimX() << std::endl;
+
+			for (unsigned int y = 0; y < vol.getDimY() - 1; y++)
+			{
+				for (unsigned int z = 0; z < vol.getDimZ() - 1; z++)
+				{
+					const int voxelCount = Instance->volume.VOXEL_COUNT_X;
+					const UINT VOLUME_IDX = (voxelCount * voxelCount * z) + (voxelCount * y) + x;
+					float weight = Instance->volume.cpuWeights[VOLUME_IDX];
+
+					if (weight > 0)
+						ProcessVolumeCell(&vol, x, y, z, 0.00f, &mesh);
+				}
+			}
+		}
+
+		// write mesh to file
+		if (!mesh.WriteMesh(filenameOut))
+		{
+			std::cout << "ERROR: unable to write output file!" << std::endl;
+		}
 	}
 
 	static void update()
@@ -411,6 +509,8 @@ private:
 	PoseEstimator poseEstimator;
 	PoseEstimator poseEstimatorFirstLevel;
 	PoseEstimator poseEstimatorSecondLevel;
+	TsdfVolume volume;
+	Tsdf tsdf;
 	bool isWritten = false;
 	int frameNumber = 0;
 	Matrix4f currentTransform;
