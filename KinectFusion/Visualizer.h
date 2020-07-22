@@ -35,7 +35,7 @@ class Visualizer
 {
 public:
 
-	Visualizer(int skip = 2) :	sensor(skip), 
+	Visualizer(int skip = 1) :	sensor(skip), 
 								filterer(640,480), 
 								backProjector(640, 480), 
 								normalCalculator(640, 480), 
@@ -133,7 +133,7 @@ public:
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(),Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
-		if (Instance->frameNumber > 0 && Instance->frameNumber < 400 )
+		if (Instance->frameNumber > 0 )
 		{
 			std::cout << Instance->frameNumber << std::endl;
 			Instance->poseEstimatorSecondLevel.resetParams();
@@ -157,10 +157,10 @@ public:
 						Instance->prevNormalCalculator.getOutputGPU(0),
 						Instance->normalCalculator.getValidMaskGPU(0)))
 					{
-						std::cout << Instance->poseEstimator.getTransform() << std::endl;
+						//std::cout << Instance->poseEstimator.getTransform() << std::endl;
 						Instance->currentTransform = Instance->currentTransform * Instance->poseEstimator.getTransform();
-						std::cout << Instance->sensor.GetTrajectory() << std::endl;
-						std::cout << Instance->sensor.GetTrajectory().inverse() << std::endl;
+						//std::cout << Instance->sensor.GetTrajectory() << std::endl;
+						//std::cout << Instance->sensor.GetTrajectory().inverse() << std::endl;
 					}
 				}
 			}
@@ -183,10 +183,11 @@ public:
 		
 		//Writing Point Cloud to .off
 		
-			/*
-			std::cout << Instance->isWritten << std::endl;
-			Instance->isWritten = true;
-			if (Instance->backProjector.copyToCPU()) {
+
+			//std::cout << Instance->isWritten << std::endl;
+			//Instance->isWritten = true;
+			if ((Instance->frameNumber % 10 == 11) && Instance->backProjector.copyToCPU()) {
+				std::cout << Instance->frameNumber << std::endl;
 				std::ofstream outFile("./vertices"+std::to_string(Instance->frameNumber)+".off");
 				if (!outFile.is_open()) return exit(1);
 				outFile << "COFF" << std::endl;
@@ -211,7 +212,6 @@ public:
 				}
 				outFile.close();
 			}
-			*/
 
 			Instance->tsdf.apply(Instance->volume, Instance->filterer.getInputGPU(), Instance->sensor.GetColorRGBX(), Instance->currentTransform);
 			if (!Instance->tsdf.isOk())
@@ -220,7 +220,7 @@ public:
 				exit(1);
 			}
 
-			if (Instance->frameNumber == 100)
+			if (Instance->frameNumber == 700)
 			{
 				std::cout << "Exporting Mesh ..." << std::endl;
 				exportMesh();
@@ -316,11 +316,18 @@ public:
 					double val = Instance->volume.cpuSdf[VOLUME_IDX];
 
 					if (isinf(val))
+					{
+						vol.set(x, y, z, 0);
 						infcount++;
+						continue;
+					}
 
 					if (isnan(val))
+					{
+						vol.set(x, y, z, 0);
 						nancount++;
-
+						continue;
+					}
 					vol.set(x, y, z, val);
 				}
 			}
