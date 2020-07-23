@@ -115,7 +115,7 @@ __global__ void rayCast(
 
 		negative = sdfValue < 0;
 
-		if (fabsf(stepSize) < 0.45f)
+		if (fabsf(stepSize) < 0.05f)
 		{
 			success = true;
 			break;
