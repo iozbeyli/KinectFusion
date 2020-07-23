@@ -79,6 +79,7 @@ __global__ void rayCast(
 	float stepSize = 0.4;
 	int maxIteration = sqrtf(voxelX * voxelX + voxelY * voxelY + voxelZ * voxelZ);
 	bool success = false;
+	bool negative = false;
 	// Send the ray
 	for (int i = 0; i < maxIteration; ++i)
 	{
@@ -102,7 +103,16 @@ __global__ void rayCast(
 			stepSize = truncation;
 			continue;
 		}
-		stepSize = sdf[voxelId];
+		float sdfValue = sdf[voxelId];
+		if (i == 0)
+		{
+			negative = sdfValue < 0;
+		}
+		if ((sdfValue > 0 && negative) || (sdfValue < 0 && !negative))
+		{
+			stepSize = - stepSize * 0.8;
+		}
+		negative = sdfValue < 0;
 		if (fabsf(stepSize) < 0.05f)
 		{
 			success = true;
