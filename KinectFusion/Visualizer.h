@@ -24,6 +24,7 @@
 #include "SimpleMesh.h"
 #include "MarchingCubes.h"
 
+#include "RayCasting.cuh"
 
 #define KINECT 0;
 
@@ -45,6 +46,7 @@ public:
 								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
 								poseEstimatorSecondLevel(160, 120, 4, 0.25f),
 								volume(640, 480, 0.06, 500, 0.01, 2),
+								raycaster(640, 480, 0.06, 500, 0.01),
 								tsdf{}
 	{
 		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
@@ -102,6 +104,12 @@ public:
 			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(volume.status()) << std::endl;
 			exit(1);
 		}
+
+		if (!raycaster.isOk())
+		{
+			std::cerr << "Failed to initialize the raycaster!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
 	}
 
 	static Visualizer* getInstance() {
@@ -133,7 +141,7 @@ public:
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(),Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
-		if (Instance->frameNumber > 0 )
+		if (Instance->frameNumber > 0 && Instance->frameNumber < 100)
 		{
 			std::cout << Instance->frameNumber << std::endl;
 			Instance->poseEstimatorSecondLevel.resetParams();
@@ -220,20 +228,35 @@ public:
 				exit(1);
 			}
 
-			if (Instance->frameNumber == 700)
+			/*if (Instance->frameNumber == 700)
 			{
 				std::cout << "Exporting Mesh ..." << std::endl;
 				exportMesh();
 				std::cout << "Finished!" << std::endl;
 				exit(0);
+			}*/
+
+			if (Instance->raycaster.apply(Instance->volume.sdf, Instance->volume.weights, Instance->currentTransform))
+			{
+				std::cout << "Raycasted" << std::endl;
+			}
+			else {
+				std::cout << ":( Cannot raycast" << std::endl;
 			}
 		}
+		else 
+		{
+			exit(0);
+		}
+
+
 		
-		if (Instance->filterer.copyToCPU()) 
+		if (Instance->filterer.copyToCPU() && Instance->raycaster.copyToCPU()) 
 		{
 			image=Instance->filterer.getOutputCPU(0);
 			imageFirstLevel = Instance->filterer.getOutputCPU(1);
 			imageSecondLevel = Instance->filterer.getOutputCPU(2);	
+
 			for (int y = 0; y < 480; ++y)
 			{
 				for (int x = 0; x < 640; ++x)
@@ -242,7 +265,7 @@ public:
 					unsigned char* ptr = Instance->depthTexture->bits + index;
 					unsigned char* ptrUnfiltered = Instance->depthTextureUnfiltered->bits + index;
 					float current = (std::fmaxf(image[index], 0) / 5) * 255;
-					float currentUnfiltered = (std::fmaxf(Instance->depthImage[index], 0) / 5) * 255;
+					float currentUnfiltered = (std::fmaxf(Instance->raycaster.getOutputCPU()[index], 0) / 5) * 255;
 					//float currentUnfiltered = std::fabsf(((std::fmaxf(Instance->depthImage[index], 0) / 5) * 255)- current );
 					*ptr = (unsigned char)std::fminf(current, 255);
 					*ptrUnfiltered = (unsigned char)std::fminf(currentUnfiltered, 255);
@@ -521,6 +544,7 @@ private:
 	bool isWritten = false;
 	int frameNumber = 0;
 	Matrix4f currentTransform;
+	RayCaster raycaster;
 };
 
 Visualizer* Visualizer::Instance = nullptr;

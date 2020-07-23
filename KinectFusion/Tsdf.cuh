@@ -324,7 +324,6 @@ void applyTsdf_v3
 
 		float3 surfacePointWorldCoord = mul(cameraToWorld, &surfacePointCameraCoord);
 
-
 		// const float3 cameraTranslation = make_float3(worldToCamera[12], worldToCamera[13], worldToCamera[14]);
 		const float3 cameraTranslation = make_float3(cameraToWorld[12], cameraToWorld[13], cameraToWorld[14]);
 		const float distanceCameraToVoxel = l2norm(make_float3
@@ -371,7 +370,6 @@ void applyTsdf_v3
 
 	}
 }
-
 
 __global__
 void applyTsdf_v4
@@ -485,6 +483,9 @@ void applyTsdf_v4
 		const float W_R = 1.0f;
 
 		float s = (weights[VOXEL_IDX] * sdfs[VOXEL_IDX]) + (W_R * tsdf) / (weights[VOXEL_IDX] + W_R);
+		if (isinf(s)) {
+			continue;
+		}
 		sdfs[VOXEL_IDX] = s;
 
 		BYTE r = (BYTE)((weights[VOXEL_IDX] * colors[VOXEL_COLOR_IDX + 0]) + (W_R * gpuFrameColorMap[FRAME_COLOR_IDX + 0]) / (weights[VOXEL_IDX] + W_R));
