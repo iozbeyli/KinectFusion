@@ -15,7 +15,7 @@
 #define CX 319.5f
 #define CY 239.5f
 #define D_THRESHOLD 0.1f
-#define N_THRESHOLD 0.05f
+#define N_THRESHOLD 0.9f
 #define MIN_PARAM_CHANGE 0.000001f
 
 __device__ __forceinline__ void setZero(float* outputA, float* outputB, int indexA, int indexB)
@@ -116,6 +116,19 @@ void fillMatrix(float* outputA, float* outputB,
 	float nZ = targetNormals[indexNormals + 2];
 
 	// Perform normal threshold (TODO)
+	float sNX = sourceNormals[indexNormals];
+	float sNY = sourceNormals[indexNormals + 1];
+	float sNZ = sourceNormals[indexNormals + 2];
+	float rotatedSNX = sNX - rZ * sNY + rY * sNZ;
+	float rotatedSNY = rZ * sNX + sNY - rX * sNZ;
+	float rotatedSNZ = -rY * sNX + rX * sNY + sNZ;
+
+	float normalDot = dot(rotatedSNX, rotatedSNY, rotatedSNZ, nX, nY, nZ);
+	if (normalDot < normalThreshold)
+	{
+		setZero(outputA, outputB, indexA, indexB);
+		return;
+	}
 	
 	// Write values to A and B
 	outputA[indexA] = nZ * sY - nY * sZ;

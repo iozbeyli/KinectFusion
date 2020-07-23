@@ -141,7 +141,7 @@ public:
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(),Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 		
-		if (Instance->frameNumber > 0 && Instance->frameNumber < 100)
+		if (Instance->frameNumber > 0)
 		{
 			std::cout << Instance->frameNumber << std::endl;
 			Instance->poseEstimatorSecondLevel.resetParams();
@@ -256,19 +256,35 @@ public:
 			image=Instance->filterer.getOutputCPU(0);
 			imageFirstLevel = Instance->filterer.getOutputCPU(1);
 			imageSecondLevel = Instance->filterer.getOutputCPU(2);	
-
+			if (Instance->frameNumber == 69)
+			{
+				std::cout << Instance->poseEstimator.getTransform() << std::endl;
+				std::cout << Instance->poseEstimator.getTransform().inverse() << std::endl;
+			}
 			for (int y = 0; y < 480; ++y)
 			{
 				for (int x = 0; x < 640; ++x)
 				{
 					int index = (y * 640 + x);
-					unsigned char* ptr = Instance->depthTexture->bits + index;
+					unsigned char* ptr = Instance->normalTexture->bits + 3*index;
 					unsigned char* ptrUnfiltered = Instance->depthTextureUnfiltered->bits + index;
-					float current = (std::fmaxf(image[index], 0) / 5) * 255;
-					float currentUnfiltered = (std::fmaxf(Instance->raycaster.getOutputCPU()[index], 0) / 5) * 255;
+					float currentX = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[3*index], -1) + 1.0f) * 127.5f;
+					float currentY = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index)+1],-1) + 1.0f) * 127.5f;
+					float currentZ = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index)+2], -1) + 1.0f) * 127.5f;
+					
+					if (Instance->frameNumber==69)
+					{
+						std::cout << Instance->raycaster.getOutputNormalCPU()[3 * index]
+							<< " , " << Instance->raycaster.getOutputNormalCPU()[(3 * index) + 1]
+							<< " , " << Instance->raycaster.getOutputNormalCPU()[(3 * index) + 2] << std::endl;
+					}
+					float currentUnfiltered = (std::fmaxf(Instance->raycaster.getOutputDepthCPU()[index], 0) / 5) * 255;
 					//float currentUnfiltered = std::fabsf(((std::fmaxf(Instance->depthImage[index], 0) / 5) * 255)- current );
-					*ptr = (unsigned char)std::fminf(current, 255);
+					*ptr = (unsigned char)std::fminf(currentX, 255);
+					*(ptr + 1) = (unsigned char)std::fminf(currentY, 255);
+					*(ptr + 2) = (unsigned char)std::fminf(currentZ, 255);
 					*ptrUnfiltered = (unsigned char)std::fminf(currentUnfiltered, 255);
+					
 
 					if (x < 320 && y < 240) 
 					{
@@ -291,7 +307,7 @@ public:
 			glBindTexture(GL_TEXTURE_2D, tobjUnfiltered->id);
 			glTexImage2D(GL_TEXTURE_2D, 0, tobjUnfiltered->internalFormat, tobjUnfiltered->width, tobjUnfiltered->height, 0, tobjUnfiltered->imageFormat, GL_UNSIGNED_BYTE, tobjUnfiltered->bits);
 
-			TextureObject* tobj = Instance->depthTexture;
+			TextureObject* tobj = Instance->normalTexture;
 			glBindTexture(GL_TEXTURE_2D, tobj->id);
 			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);
 
@@ -420,16 +436,17 @@ public:
 
 		VertexData meshData = { &(vertices[0][0]), NULL, NULL, &(textcoords[0][0]) };
 
-		/*glBindTexture(GL_TEXTURE_2D, Instance->colorTexture->id);
-		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);*/
-
+		
 		glBindTexture(GL_TEXTURE_2D, Instance->depthTextureUnfiltered->id);
 		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
 
 		glTranslatef(0.25f, 0.0f, 0.0f);
 
-		glBindTexture(GL_TEXTURE_2D, Instance->depthTexture->id);
+		glBindTexture(GL_TEXTURE_2D, Instance->normalTexture->id);
 		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+
+		//glBindTexture(GL_TEXTURE_2D, Instance->depthTexture->id);
+		//drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
 
 		glTranslatef(0.25f, 0.0f, 0.0f);
 
@@ -488,7 +505,7 @@ public:
 		glutReshapeFunc(reshape);
 		glutKeyboardFunc(keyEvents);
 
-		colorTexture = createTexture(640, 480, GL_RGB, 3);
+		normalTexture = createTexture(640, 480, GL_RGB, 3);
 		depthTextureUnfiltered = createTexture(640, 480, GL_LUMINANCE, 1);
 		depthTexture = createTexture(640, 480, GL_LUMINANCE, 1);
 		depthTextureFirstLevel = createTexture(320, 240, GL_LUMINANCE, 1);
@@ -498,7 +515,7 @@ public:
 
 		destroyKinect();
 
-		destroyTexture(colorTexture);
+		destroyTexture(normalTexture);
 		destroyTexture(depthTexture);
 		destroyTexture(depthTextureFirstLevel);
 		destroyTexture(depthTextureSecondLevel);
@@ -518,7 +535,7 @@ private:
 	static Visualizer* Instance;
 	
 	//std::string hudText;
-	TextureObject* colorTexture = nullptr;
+	TextureObject* normalTexture = nullptr;
 	TextureObject* depthTexture = nullptr;
 	TextureObject* depthTextureFirstLevel = nullptr;
 	TextureObject* depthTextureSecondLevel = nullptr;

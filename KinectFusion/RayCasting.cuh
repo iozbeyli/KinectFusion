@@ -43,6 +43,7 @@ int3 voxelIndex(const float3 point, float voxelSize)
 
 __global__ void rayCast(
 	float* depth, // TODO: add normals
+	float* normal,
 	float* sdf,
 	float* weights,
 	float* c2w,
@@ -80,17 +81,19 @@ __global__ void rayCast(
 	int maxIteration = sqrtf(voxelX * voxelX + voxelY * voxelY + voxelZ * voxelZ);
 	bool success = false;
 	bool negative = false;
+	int3 index;
+	float sdfValue;
 	// Send the ray
 	for (int i = 0; i < maxIteration; ++i)
 	{
 		// Move the ray
 		takeStep(&point, scaled(step, stepSize));
 		// Calculate the voxel index
-		int3 index = voxelIndex(point, voxelSize);
-		// Exit if goes out
-		if (index.x >= voxelX || index.x < 0 ||
-			index.y >= voxelY || index.y < 0 ||
-			index.z >= voxelZ || index.z < 0)
+		index=voxelIndex(point, voxelSize);
+		// Exit if goes out or on boundary for normals
+		if (index.x >= (voxelX-1) || index.x < 0 ||
+			index.y >= (voxelY-1) || index.y < 0 ||
+			index.z >= (voxelZ-1) || index.z < 0)
 		{
 			break;
 		}
@@ -103,28 +106,44 @@ __global__ void rayCast(
 			stepSize = truncation;
 			continue;
 		}
-		float sdfValue = sdf[voxelId];
-		if (i == 0)
+		sdfValue = sdf[voxelId];
+		
+		if (i > 0 && ((sdfValue > 0 && negative) || (sdfValue < 0 && !negative)))
 		{
-			negative = sdfValue < 0;
+			stepSize = - stepSize * 0.6;
 		}
-		if ((sdfValue > 0 && negative) || (sdfValue < 0 && !negative))
-		{
-			stepSize = - stepSize * 0.8;
-		}
+
 		negative = sdfValue < 0;
-		if (fabsf(stepSize) < 0.05f)
+
+		if (fabsf(stepSize) < 0.45f)
 		{
 			success = true;
 			break;
 		}
 	}
-	if (success)
+	int indexImage = y * width + x;
+	int voxelIdRight = (voxelX * voxelY * index.z) + (voxelX * index.y) + index.x + 1;
+	int voxelIdTop = (voxelX * voxelY * index.z) + (voxelX * (index.y + 1)) + index.x;
+	int voxelIdBehind = (voxelX * voxelY * (index.z + 1)) + (voxelX * index.y) + index.x;
+	if (success && weights[voxelIdRight] > 0.1 && weights[voxelIdTop] > 0.1 && weights[voxelIdBehind] > 0.1)
 	{
-		depth[y * width + x] = mul(w2c, &point).z;
+		float right = sdf[voxelIdRight] - sdfValue;
+		float top = sdf[voxelIdTop] - sdfValue;
+		float behind = sdf[voxelIdBehind] - sdfValue;
+		float3 beforeNormalization = make_float3(right, top, behind);
+		float3 normalizedCamera = rot(w2c, &beforeNormalization);
+		float magnitude = l2norm(normalizedCamera);
+		float3 normalized = scaled(normalizedCamera, 1.0f / magnitude);
+		depth[indexImage] = mul(w2c, &point).z;
+		normal[3 * indexImage] = normalized.x;
+		normal[3 * indexImage + 1] = normalized.y;
+		normal[3 * indexImage + 2] = normalized.z;
 	}
 	else {
-		depth[y * width + x] = 0;
+		depth[indexImage] = 10.0f;
+		normal[3 * indexImage] = 1.0f;
+		normal[3 * indexImage + 1] = 1.0f;
+		normal[3 * indexImage + 2] = 1.0f;
 	}
 
 
@@ -141,7 +160,14 @@ public:
 		m_voxelCount = voxelCount;
 		m_voxelSize = voxelSize;
 		m_size = width * height * sizeof(float);
-		auto status = cudaMalloc((void**)&m_depth, m_size);
+		auto status = cudaMalloc((void**)&m_normal, 3*m_size);
+		m_normalCpu = (float*)malloc(3*m_size);
+		if (status != cudaSuccess)
+		{
+			m_ok = false;
+			return;
+		}
+		status = cudaMalloc((void**)&m_depth, m_size);
 		m_depthCpu = (float*)malloc(m_size);
 		if (status != cudaSuccess)
 		{
@@ -176,7 +202,7 @@ public:
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
-		rayCast<<<gridSize, blockSize>>>(m_depth, sdf, weights, m_c2w, m_w2c, m_truncation, m_voxelSize, m_voxelCount, m_voxelCount, m_voxelCount, m_width, m_height);
+		rayCast<<<gridSize, blockSize>>>(m_depth,m_normal, sdf, weights, m_c2w, m_w2c, m_truncation, m_voxelSize, m_voxelCount, m_voxelCount, m_voxelCount, m_width, m_height);
 		
 		return true;
 	}
@@ -188,17 +214,32 @@ public:
 		{
 			return false;
 		}
+		cudaStatus = cudaMemcpy(m_normalCpu, m_normal, 3*m_size, cudaMemcpyDeviceToHost);
+		if (cudaStatus != cudaSuccess)
+		{
+			return false;
+		}
 		return true;
 	}
 
-	float* getOutputCPU() 
+	float* getOutputDepthCPU() 
 	{
 		return m_depthCpu;
 	}
 
-	float* getOutputGPU() 
+	float* getOutputDepthGPU() 
 	{
 		return m_depth;
+	}
+
+	float* getOutputNormalCPU()
+	{
+		return m_normalCpu;
+	}
+
+	float* getOutputNormalGPU()
+	{
+		return m_normal;
 	}
 
 
@@ -206,6 +247,8 @@ public:
 	{
 		free(m_depthCpu);
 		cudaFree(m_depth);
+		free(m_normalCpu);
+		cudaFree(m_normal);
 	}
 
 private:
@@ -214,6 +257,10 @@ private:
 
 	float* m_depth;
 	float* m_depthCpu;
+	
+	float* m_normal;
+	float* m_normalCpu;
+
 	float* m_c2w;
 	float* m_w2c;
 	bool m_ok = true;
