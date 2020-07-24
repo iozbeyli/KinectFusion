@@ -88,12 +88,18 @@ void subSample(float* output, float* input, int inputWidth, int inputHeight, flo
 
 class Filterer {
 public: 
-	Filterer(int width, int height) 
+	Filterer(int width, int height, bool allocateInput) 
 	{
 		m_width = width;
 		m_height = height;
 		m_size = width * height * sizeof(float);
-		m_cudaStatusInput = cudaMalloc((void**)&m_inputMap, m_size);
+		if (allocateInput)
+		{
+			m_cudaStatusInput = cudaMalloc((void**)&m_inputMap, m_size);
+		}
+		else {
+			m_cudaStatusInput = cudaSuccess;
+		}
 		m_cudaStatusOutput = cudaMalloc((void**)&m_outputMap, m_size);
 		m_cudaStatusOutputFirstLevel = cudaMalloc((void**)&m_outputFirstLevelMap, m_size/4);
 		m_cudaStatusOutputSecondLevel = cudaMalloc((void**)&m_outputSecondLevelMap, m_size/16);
@@ -140,6 +146,24 @@ public:
 		gridSize = dim3(m_width / 32, m_height / 32);
 		blockSize = dim3(8, 8);
 		subSample <<<gridSize, blockSize>>> (m_outputSecondLevelMap, m_outputFirstLevelMap, m_width / 2, m_height / 2, sigmaRange);
+		return true;
+	}
+
+	bool applyFilterGPU(float* input)
+	{
+		dim3 gridSize(m_width / 16, m_height / 16);
+		dim3 blockSize(16, 16);
+
+		int filterHalfSize = 3;
+		float sigmaSpatial = 1.0f;
+		float sigmaRange = 1.0f;
+
+		applyBilateralFilter << <gridSize, blockSize >> > (m_outputMap, input, m_width, m_height, sigmaSpatial, sigmaRange, filterHalfSize);
+		gridSize = dim3(m_width / 32, m_height / 32);
+		subSample<<<gridSize, blockSize >> > (m_outputFirstLevelMap, m_outputMap, m_width, m_height, sigmaRange);
+		gridSize = dim3(m_width / 32, m_height / 32);
+		blockSize = dim3(8, 8);
+		subSample<<<gridSize, blockSize >> > (m_outputSecondLevelMap, m_outputFirstLevelMap, m_width / 2, m_height / 2, sigmaRange);
 		return true;
 	}
 

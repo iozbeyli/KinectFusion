@@ -37,9 +37,12 @@ class Visualizer
 public:
 
 	Visualizer(int skip = 1) :	sensor(skip), 
-								filterer(640,480), 
+								filterer(640,480,true),
+								filtererModel(640, 480, false),
 								backProjector(640, 480), 
 								normalCalculator(640, 480), 
+								backProjectorModel(640, 480),
+								normalCalculatorModel(640, 480),
 								poseEstimator(640, 480, 10, 1.0f),
 								prevBackProjector(640, 480), 
 								prevNormalCalculator(640, 480),
@@ -63,6 +66,12 @@ public:
 			exit(1);
 		}
 
+		if (!filtererModel.isOK())
+		{
+			std::cerr << "Failed to initialize the filterer!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
 		if (!backProjector.isOK()) 
 		{
 			std::cerr << "Failed to initialize the back projector!\nCheck your gpu memory!" << std::endl;
@@ -71,7 +80,19 @@ public:
 
 		if (!normalCalculator.isOK())
 		{
-			std::cerr << "Failed to initialize the back projector!\nCheck your gpu memory!" << std::endl;
+			std::cerr << "Failed to initialize the normal calculator!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!backProjectorModel.isOK())
+		{
+			std::cerr << "Failed to initialize the back projector model!\nCheck your gpu memory!" << std::endl;
+			exit(1);
+		}
+
+		if (!normalCalculatorModel.isOK())
+		{
+			std::cerr << "Failed to initialize the normal calculator model!\nCheck your gpu memory!" << std::endl;
 			exit(1);
 		}
 
@@ -140,6 +161,7 @@ public:
 		Instance->filterer.applyFilter(Instance->depthImage);
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(),Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
+		
 		
 		if (Instance->frameNumber > 0)
 		{
@@ -221,12 +243,6 @@ public:
 				outFile.close();
 			}
 
-			Instance->tsdf.apply(Instance->volume, Instance->filterer.getInputGPU(), Instance->sensor.GetColorRGBX(), Instance->currentTransform);
-			if (!Instance->tsdf.isOk())
-			{
-				std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->tsdf.status()) << std::endl;
-				exit(1);
-			}
 
 			/*if (Instance->frameNumber == 700)
 			{
@@ -235,20 +251,25 @@ public:
 				std::cout << "Finished!" << std::endl;
 				exit(0);
 			}*/
-
-			if (Instance->raycaster.apply(Instance->volume.sdf, Instance->volume.weights, Instance->currentTransform))
-			{
-				std::cout << "Raycasted" << std::endl;
-			}
-			else {
-				std::cout << ":( Cannot raycast" << std::endl;
-			}
 		}
-		else 
+
+		Instance->tsdf.apply(Instance->volume, Instance->filterer.getInputGPU(), Instance->sensor.GetColorRGBX(), Instance->currentTransform);
+		if (!Instance->tsdf.isOk())
 		{
-			exit(0);
+			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->tsdf.status()) << std::endl;
+			exit(1);
 		}
 
+		if (Instance->raycaster.apply(Instance->volume.sdf, Instance->volume.weights, Instance->currentTransform))
+		{
+			std::cout << "Raycasted" << std::endl;
+		}
+		else {
+			std::cout << ":( Cannot raycast" << std::endl;
+		}
+		Instance->filtererModel.applyFilterGPU(Instance->raycaster.getOutputDepthGPU());
+		Instance->prevBackProjector.apply(Instance->raycaster.getOutputDepthGPU(), Instance->filtererModel.getOutputGPU(0), Instance->filtererModel.getOutputGPU(1), Instance->filtererModel.getOutputGPU(2));
+		Instance->prevNormalCalculator.apply(Instance->prevBackProjector.getOutputGPU(-1), Instance->prevBackProjector.getOutputGPU(0), Instance->prevBackProjector.getOutputGPU(1), Instance->prevBackProjector.getOutputGPU(2));
 
 		
 		if (Instance->filterer.copyToCPU() && Instance->raycaster.copyToCPU()) 
@@ -272,12 +293,12 @@ public:
 					float currentY = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index)+1],-1) + 1.0f) * 127.5f;
 					float currentZ = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index)+2], -1) + 1.0f) * 127.5f;
 					
-					if (Instance->frameNumber==69)
+					/*if (Instance->frameNumber==69)
 					{
 						std::cout << Instance->raycaster.getOutputNormalCPU()[3 * index]
 							<< " , " << Instance->raycaster.getOutputNormalCPU()[(3 * index) + 1]
 							<< " , " << Instance->raycaster.getOutputNormalCPU()[(3 * index) + 2] << std::endl;
-					}
+					}*/
 					float currentUnfiltered = (std::fmaxf(Instance->raycaster.getOutputDepthCPU()[index], 0) / 5) * 255;
 					//float currentUnfiltered = std::fabsf(((std::fmaxf(Instance->depthImage[index], 0) / 5) * 255)- current );
 					*ptr = (unsigned char)std::fminf(currentX, 255);
@@ -321,8 +342,8 @@ public:
 
 			
 		}
-		Instance->prevBackProjector.copy(&Instance->backProjector);
-		Instance->prevNormalCalculator.copy(&Instance->normalCalculator); 
+		/*Instance->prevBackProjector.copy(&Instance->backProjector);
+		Instance->prevNormalCalculator.copy(&Instance->normalCalculator); */
 
 	}
 
@@ -549,8 +570,11 @@ private:
 		VirtualSensor sensor;
 	#endif 
 	Filterer filterer;
+	Filterer filtererModel;
 	BackProjector backProjector;
+	BackProjector backProjectorModel;
 	NormalCalculator normalCalculator;
+	NormalCalculator normalCalculatorModel;
 	BackProjector prevBackProjector;
 	NormalCalculator prevNormalCalculator;
 	PoseEstimator poseEstimator;

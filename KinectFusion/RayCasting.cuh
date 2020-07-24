@@ -139,6 +139,10 @@ __global__ void rayCast(
 		normal[3 * indexImage + 1] = normalized.y;
 		normal[3 * indexImage + 2] = normalized.z;
 	}
+	else if (success)
+	{
+		depth[indexImage] = mul(w2c, &point).z;
+	}
 	else {
 		depth[indexImage] = 10.0f;
 		normal[3 * indexImage] = 1.0f;
