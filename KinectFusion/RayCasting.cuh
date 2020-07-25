@@ -35,17 +35,19 @@ __device__ __forceinline__
 int3 voxelIndex(const float3 point, float voxelSize)
 {
 	int3 index;
-	index.x = (point.x + 3.8) / voxelSize - .5;
-	index.y = (point.y + 3.5) / voxelSize - .5;
-	index.z = point.z / voxelSize - .5;
+	index.x = (point.x + X_OFFSET) / voxelSize - .5;
+	index.y = (point.y + Y_OFFSET) / voxelSize - .5;
+	index.z = (point.z + Z_OFFSET) / voxelSize - .5;
 	return index;
 }
 
 __global__ void rayCast(
-	float* depth, // TODO: add normals
+	float* depth,
 	float* normal,
+	BYTE* color,
 	float* sdf,
 	float* weights,
+	BYTE* sdfColor,
 	float* c2w,
 	float* w2c,
 	float truncation,
@@ -83,6 +85,7 @@ __global__ void rayCast(
 	bool negative = false;
 	int3 index;
 	float sdfValue;
+	int voxelId;
 	// Send the ray
 	for (int i = 0; i < maxIteration; ++i)
 	{
@@ -100,7 +103,7 @@ __global__ void rayCast(
 		// Take the last sdf value
 		// if weight is zero or inf, set step to truncation distance
 		// otherwise, set step to distance
-		const int voxelId = (voxelX * voxelY * index.z) + (voxelX * index.y) + index.x;
+		voxelId = (voxelX * voxelY * index.z) + (voxelX * index.y) + index.x;
 		if (weights[voxelId] < 0.1)
 		{
 			stepSize = truncation;
@@ -115,7 +118,7 @@ __global__ void rayCast(
 
 		negative = sdfValue < 0;
 
-		if (fabsf(stepSize) < 0.45f)
+		if (fabsf(stepSize) < voxelSize)
 		{
 			success = true;
 			break;
@@ -138,16 +141,27 @@ __global__ void rayCast(
 		normal[3 * indexImage] = normalized.x;
 		normal[3 * indexImage + 1] = normalized.y;
 		normal[3 * indexImage + 2] = normalized.z;
+
+		color[3 * indexImage] = sdfColor[4 * voxelId];
+		color[3 * indexImage + 1] = sdfColor[4 * voxelId + 1];
+		color[3 * indexImage + 2] = sdfColor[4 * voxelId + 2];
 	}
 	else if (success)
 	{
 		depth[indexImage] = mul(w2c, &point).z;
+		color[3 * indexImage] = sdfColor[4 * voxelId];
+		color[3 * indexImage + 1] = sdfColor[4 * voxelId + 1];
+		color[3 * indexImage + 2] = sdfColor[4 * voxelId + 2];
+
 	}
 	else {
-		depth[indexImage] = 10.0f;
-		normal[3 * indexImage] = 1.0f;
-		normal[3 * indexImage + 1] = 1.0f;
-		normal[3 * indexImage + 2] = 1.0f;
+		depth[indexImage] = -INFINITY; // 10.0f;
+		normal[3 * indexImage] = -INFINITY; //1.0f;
+		normal[3 * indexImage + 1] = -INFINITY; //-1.0f;
+		normal[3 * indexImage + 2] = -INFINITY; //1.0f;
+		color[3 * indexImage] = 0;
+		color[3 * indexImage + 1] = 0;
+		color[3 * indexImage + 2] = 0;
 	}
 
 
@@ -190,11 +204,20 @@ public:
 			m_ok = false;
 			return;
 		}
+
+		m_colorCpu = (BYTE*)malloc(width * height * 3);
+		status = cudaMalloc((void**)&m_color, width * height * 3);
+		if (status != cudaSuccess)
+		{
+			m_ok = false;
+			return;
+		}
+		
 	}
 
 	bool isOk() { return m_ok; }
 
-	bool apply(float* sdf, float *weights, Matrix4f cameraToWorld)
+	bool apply(float* sdf, float *weights, BYTE *sdfColor, Matrix4f cameraToWorld)
 	{
 		auto status = cudaMemcpy(m_c2w, cameraToWorld.data(), 16 * sizeof(float), cudaMemcpyHostToDevice);
 		if (status != cudaSuccess) return false;
@@ -206,7 +229,7 @@ public:
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
-		rayCast<<<gridSize, blockSize>>>(m_depth,m_normal, sdf, weights, m_c2w, m_w2c, m_truncation, m_voxelSize, m_voxelCount, m_voxelCount, m_voxelCount, m_width, m_height);
+		rayCast<<<gridSize, blockSize>>>(m_depth,m_normal,m_color, sdf, weights, sdfColor, m_c2w, m_w2c, m_truncation, m_voxelSize, m_voxelCount, m_voxelCount, m_voxelCount, m_width, m_height);
 		
 		return true;
 	}
@@ -219,6 +242,11 @@ public:
 			return false;
 		}
 		cudaStatus = cudaMemcpy(m_normalCpu, m_normal, 3*m_size, cudaMemcpyDeviceToHost);
+		if (cudaStatus != cudaSuccess)
+		{
+			return false;
+		}
+		cudaStatus = cudaMemcpy(m_colorCpu, m_color, 3 * m_width * m_height, cudaMemcpyDeviceToHost);
 		if (cudaStatus != cudaSuccess)
 		{
 			return false;
@@ -246,6 +274,15 @@ public:
 		return m_normal;
 	}
 
+	BYTE* getOutputColorGPU()
+	{
+		return m_color;
+	}
+
+	BYTE* getOutputColorCPU()
+	{
+		return m_colorCpu;
+	}
 
 	~RayCaster()
 	{
@@ -253,6 +290,8 @@ public:
 		cudaFree(m_depth);
 		free(m_normalCpu);
 		cudaFree(m_normal);
+		free(m_colorCpu);
+		cudaFree(m_color);
 	}
 
 private:
@@ -264,6 +303,9 @@ private:
 	
 	float* m_normal;
 	float* m_normalCpu;
+
+	BYTE* m_color;
+	BYTE* m_colorCpu;
 
 	float* m_c2w;
 	float* m_w2c;

@@ -38,9 +38,11 @@ public:
 		m_baseDir = datasetDir;
 
 		// read filename lists
+		std::cout << "depth" << std::endl;
 		if (!ReadFileList(datasetDir + "depth.txt", m_filenameDepthImages, m_depthImagesTimeStamps)) return false;
+		std::cout << "rgb" << std::endl;
 		if (!ReadFileList(datasetDir + "rgb.txt", m_filenameColorImages, m_colorImagesTimeStamps)) return false;
-
+		std::cout << "trajectory" << std::endl;
 		// read tracking
 		if (!ReadTrajectoryFile(datasetDir + "groundtruth.txt", m_trajectory, m_trajectoryTimeStamps)) return false;
 
@@ -49,7 +51,7 @@ public:
 		for (auto& m : m_trajectory) {
 			m = m * im;
 		}
-
+		std::cout << "iamges"<< m_filenameDepthImages.size()<< m_filenameColorImages.size() << std::endl;
 		if (m_filenameDepthImages.size() != m_filenameColorImages.size()) return false;
 
 		// image resolutions

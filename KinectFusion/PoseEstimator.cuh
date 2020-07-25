@@ -48,6 +48,7 @@ void fillMatrix(float* outputA, float* outputB,
 		float* sourcePoints, float* targetPoints,
 		float* sourceNormals, float* targetNormals,
 		bool* validMask,
+		bool* targetValidMask,
 		float rX, float rY, float rZ,
 		float tX, float tY, float tZ,
 		int width, int height,
@@ -69,7 +70,7 @@ void fillMatrix(float* outputA, float* outputB,
 	int indexNormals = indexPoints;
 
 	// Set 0 for invalids
-	if (!validMask[indexWithoutChannel])
+	if (!validMask[indexWithoutChannel] || !targetValidMask[indexWithoutChannel])
 	{
 		setZero(outputA, outputB, indexA, indexB);
 		return;
@@ -195,7 +196,7 @@ public:
 		return result;
 	}
 
-	bool apply(float* sourcePoints, float* targetPoints, float* sourceNormals, float* targetNormals, bool* validMask)
+	bool apply(float* sourcePoints, float* targetPoints, float* sourceNormals, float* targetNormals, bool* validMask, bool* targetValidMask)
 	{
 		dim3 gridSize(m_width / 8, m_height / 8);
 		dim3 blockSize(8, 8);
@@ -206,6 +207,7 @@ public:
 							sourcePoints, targetPoints,
 							sourceNormals, targetNormals,
 							validMask,
+							targetValidMask,
 							m_rX, m_rY, m_rZ,
 							m_tX, m_tY, m_tZ,
 							m_width, m_height,
@@ -285,7 +287,8 @@ private:
 		int k = m_height * m_width;
 		const float alpha = 1.0f;
 		const float beta = 0;
-		status =  cublasSgemm(m_handle, CUBLAS_OP_N, CUBLAS_OP_T, n, n, k, &alpha, m_A, n, m_A, n,
+		status =  cublasSgemm(
+			m_handle, CUBLAS_OP_N, CUBLAS_OP_T, n, n, k, &alpha, m_A, n, m_A, n,
 			&beta, m_AtA, n);
 		/*status = cublasSsyrk(
 			m_handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N,
@@ -324,13 +327,14 @@ private:
 		{
 			return false;
 		}
+		//std::cout << Amat.sum() << std::endl;
+		//std::cout << bvec.sum() << std::endl;
+		// exit(0);
 		x = ::solve(Amat, bvec);
 		//std::cout << Amat << bvec << std::endl;
 		setParams(x);
 		return true;
 	}
-
-	
 
 	int m_width;
 	int m_height;
@@ -353,5 +357,3 @@ private:
 	cublasHandle_t m_handle;
 
 };
-
-

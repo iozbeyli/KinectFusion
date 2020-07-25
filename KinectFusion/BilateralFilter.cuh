@@ -108,7 +108,7 @@ public:
 		m_outputSecondLevelMapCPU = (float*)malloc(m_size/16);
 	}
 	~Filterer() {
-		cudaFree(m_inputMap);
+		if (m_ownInput) cudaFree(m_inputMap);
 		cudaFree(m_outputMap);
 		cudaFree(m_outputFirstLevelMap);
 		cudaFree(m_outputSecondLevelMap);
@@ -136,9 +136,9 @@ public:
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
-		int filterHalfSize = 3;
-		float sigmaSpatial = 1.0f;
-		float sigmaRange = 1.0f;
+		int filterHalfSize = 5;
+		float sigmaSpatial = 1.6f;
+		float sigmaRange = 1.6f;
 
 		applyBilateralFilter<<<gridSize, blockSize>>>(m_outputMap, m_inputMap, m_width, m_height,sigmaSpatial,sigmaRange,filterHalfSize);
 		gridSize = dim3(m_width / 32, m_height / 32);
@@ -151,6 +151,7 @@ public:
 
 	bool applyFilterGPU(float* input)
 	{
+		m_ownInput = false;
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
@@ -158,7 +159,8 @@ public:
 		float sigmaSpatial = 1.0f;
 		float sigmaRange = 1.0f;
 
-		applyBilateralFilter << <gridSize, blockSize >> > (m_outputMap, input, m_width, m_height, sigmaSpatial, sigmaRange, filterHalfSize);
+		applyBilateralFilter <<<gridSize, blockSize>>> (m_outputMap, input, m_width, m_height, sigmaSpatial, sigmaRange, filterHalfSize);
+		//m_outputMap = input;
 		gridSize = dim3(m_width / 32, m_height / 32);
 		subSample<<<gridSize, blockSize >> > (m_outputFirstLevelMap, m_outputMap, m_width, m_height, sigmaRange);
 		gridSize = dim3(m_width / 32, m_height / 32);
@@ -210,7 +212,7 @@ public:
 	}
 
 private:
-	float* m_inputMap;
+	float* m_inputMap = nullptr;
 	float* m_outputMap;
 	float* m_outputFirstLevelMap;
 	float* m_outputSecondLevelMap;
@@ -224,4 +226,6 @@ private:
 	float* m_outputMapCPU;
 	float* m_outputFirstLevelMapCPU;
 	float* m_outputSecondLevelMapCPU;
+
+	bool m_ownInput = true;
 };
