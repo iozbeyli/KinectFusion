@@ -13,6 +13,7 @@ Volume::Volume(Vector3d min_, Vector3d max_, uint dx_, uint dy_, uint dz_, uint 
 	vol = NULL;
 
 	vol = new double[dx*dy*dz];
+	vol_colors = new BYTE*[dx*dy*dz];
 
 	compute_ddx_dddx();
 }
@@ -20,6 +21,7 @@ Volume::Volume(Vector3d min_, Vector3d max_, uint dx_, uint dy_, uint dz_, uint 
 Volume::~Volume()
 {
 	delete[] vol;
+	delete[] vol_colors;
 };
 
 

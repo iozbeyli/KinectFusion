@@ -52,13 +52,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GlobalModel.cuh" />
-    <ClInclude Include="MarchingCubes.h" />
     <ClInclude Include="Raycaster.cuh" />
     <ClInclude Include="SimpleMesh.h" />
     <ClInclude Include="Tsdf.cuh" />
     <ClInclude Include="TsdfVolume.cuh" />
     <ClInclude Include="Volume.h" />
     <ClInclude Include="Visualizer.h" />
+    <ClInclude Include="RayCasting.cuh" />
+    <ClInclude Include="MeshExporter.h" />
+    <ClInclude Include="MarchingCubes.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp">
