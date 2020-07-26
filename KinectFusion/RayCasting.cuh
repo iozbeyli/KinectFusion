@@ -41,6 +41,78 @@ int3 voxelIndex(const float3 point, float voxelSize)
 	return index;
 }
 
+__device__ __forceinline__
+float3 voxelPoint(const float3 point, float voxelSize)
+{
+	float3 index;
+	index.x = (point.x + X_OFFSET) / voxelSize - .5;
+	index.y = (point.y + Y_OFFSET) / voxelSize - .5;
+	index.z = (point.z + Z_OFFSET) / voxelSize - .5;
+	return index;
+}
+
+__device__ __forceinline__
+int voxelIndex1d(int3 index, int3 voxelDims)
+{
+	return (voxelDims.x * voxelDims.y * index.z) + (voxelDims.y * index.y) + index.x;
+}
+
+__device__ __forceinline__
+int3 fitIndex(int3 index, int3 voxelDims)
+{
+	if (index.x < 0) index.x = 0;
+	if (index.y < 0) index.y = 0;
+	if (index.z < 0) index.z = 0;
+
+	if (index.x >= voxelDims.x) index.x = voxelDims.x - 1;
+	if (index.y >= voxelDims.y) index.y = voxelDims.y - 1;
+	if (index.z >= voxelDims.z) index.z = voxelDims.z - 1;
+
+	return index;
+}
+
+
+// See https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/interpolation/trilinear-interpolation
+// Assumes the provided index is inside the grid boundaries
+__device__
+float interpolate3(float *grid, float* weights, float3 point, int3 index, int3 voxelDims, float voxelSize)
+{
+	// Get the indices
+	int index000 = voxelIndex1d(index, voxelDims);
+	int index100 = voxelIndex1d(fitIndex(make_int3(index.x + 1, index.y, index.z), voxelDims), voxelDims);
+	int index010 = voxelIndex1d(fitIndex(make_int3(index.x, index.y + 1, index.z), voxelDims), voxelDims);
+	int index001 = voxelIndex1d(fitIndex(make_int3(index.x, index.y, index.z + 1), voxelDims), voxelDims);
+	int index110 = voxelIndex1d(fitIndex(make_int3(index.x + 1, index.y + 1, index.z), voxelDims), voxelDims);
+	int index101 = voxelIndex1d(fitIndex(make_int3(index.x + 1, index.y, index.z + 1), voxelDims), voxelDims);
+	int index011 = voxelIndex1d(fitIndex(make_int3(index.x, index.y + 1, index.z + 1), voxelDims), voxelDims);
+	int index111 = voxelIndex1d(fitIndex(make_int3(index.x + 1, index.y + 1, index.z + 1), voxelDims), voxelDims);
+	
+	// Set the interpolation params
+	float3 pointIndex = voxelPoint(point, voxelSize);
+	float tx = pointIndex.x - index.x;
+	float ty = pointIndex.y - index.y;
+	float tz = pointIndex.z - index.z;
+
+	// Return the value (Again, assume 000 is inside boundaries)
+	float value = grid[index000];
+	// This should not happen with the current call
+	if (weights[index000] < 0.1)
+	{
+		return -INFINITY;
+	}
+
+#define SAFE_GET(indexNear) ((weights[indexNear] >= 0.1) ? grid[indexNear] : value)
+	return 
+		(1 - tx) * (1 - ty) * (1 - tz) * value +
+		tx * (1 - ty) * (1 - tz) * SAFE_GET(index100) +
+		(1 - tx) * ty * (1 - tz) * SAFE_GET(index010) +
+		(1 - tx) * ty * (1 - tz) * SAFE_GET(index001) +
+		tx * ty * (1 - tz) * SAFE_GET(index110) +
+		tx * (1 - ty) * tz * SAFE_GET(index101) +
+		(1 - tx) * ty * tz * SAFE_GET(index011) +
+		tx * ty * tz * SAFE_GET(index111);
+}
+
 __global__ void rayCast(
 	float* depth,
 	float* normal,
@@ -92,7 +164,7 @@ __global__ void rayCast(
 		// Move the ray
 		takeStep(&point, scaled(step, stepSize));
 		// Calculate the voxel index
-		index=voxelIndex(point, voxelSize);
+		index = voxelIndex(point, voxelSize);
 		// Exit if goes out or on boundary for normals
 		if (index.x >= (voxelX-1) || index.x < 0 ||
 			index.y >= (voxelY-1) || index.y < 0 ||
@@ -125,36 +197,44 @@ __global__ void rayCast(
 		}
 	}
 	int indexImage = y * width + x;
-	int voxelIdRight = (voxelX * voxelY * index.z) + (voxelX * index.y) + index.x + 1;
-	int voxelIdTop = (voxelX * voxelY * index.z) + (voxelX * (index.y + 1)) + index.x;
-	int voxelIdBehind = (voxelX * voxelY * (index.z + 1)) + (voxelX * index.y) + index.x;
+
+	int3 voxelDims = make_int3(voxelX, voxelY, voxelZ);
+	
+	int3 indexRight = make_int3(index.x + 1, index.y, index.z);
+	int voxelIdRight = voxelIndex1d(indexRight, voxelDims);
+	
+	int3 indexTop = make_int3(index.x, index.y + 1, index.z);
+	int voxelIdTop = voxelIndex1d(indexTop, voxelDims);
+
+	int3 indexBehind = make_int3(index.x, index.y, index.z + 1);
+	int voxelIdBehind = voxelIndex1d(indexBehind, voxelDims);
+
 	if (success && weights[voxelIdRight] > 0.1 && weights[voxelIdTop] > 0.1 && weights[voxelIdBehind] > 0.1)
 	{
-		float right = sdf[voxelIdRight] - sdfValue;
-		float top = sdf[voxelIdTop] - sdfValue;
-		float behind = sdf[voxelIdBehind] - sdfValue;
-		float3 beforeNormalization = make_float3(right, top, behind);
+		float current = interpolate3(sdf, weights, point, index, voxelDims, voxelSize);
+		float right = interpolate3(sdf, weights, voxelToWorld(indexRight, voxelSize), indexRight, voxelDims, voxelSize);
+		float top = interpolate3(sdf, weights, voxelToWorld(indexTop, voxelSize), indexTop, voxelDims, voxelSize);
+		float behind = interpolate3(sdf, weights, voxelToWorld(indexBehind, voxelSize), indexBehind, voxelDims, voxelSize);
+
+		float3 beforeNormalization = make_float3(current-right, current-top, current-behind);
 		float3 normalizedCamera = rot(w2c, &beforeNormalization);
 		float magnitude = l2norm(normalizedCamera);
 		float3 normalized = scaled(normalizedCamera, 1.0f / magnitude);
-		depth[indexImage] = mul(w2c, &point).z;
 		normal[3 * indexImage] = normalized.x;
 		normal[3 * indexImage + 1] = normalized.y;
 		normal[3 * indexImage + 2] = normalized.z;
-
-		color[3 * indexImage] = sdfColor[4 * voxelId];
-		color[3 * indexImage + 1] = sdfColor[4 * voxelId + 1];
-		color[3 * indexImage + 2] = sdfColor[4 * voxelId + 2];
 	}
-	else if (success)
+	
+	// Fill depth and color even without normals
+	if (success)
 	{
 		depth[indexImage] = mul(w2c, &point).z;
 		color[3 * indexImage] = sdfColor[4 * voxelId];
 		color[3 * indexImage + 1] = sdfColor[4 * voxelId + 1];
 		color[3 * indexImage + 2] = sdfColor[4 * voxelId + 2];
-
 	}
-	else {
+	else 
+	{
 		depth[indexImage] = -INFINITY; // 10.0f;
 		normal[3 * indexImage] = -INFINITY; //1.0f;
 		normal[3 * indexImage + 1] = -INFINITY; //-1.0f;
@@ -163,7 +243,6 @@ __global__ void rayCast(
 		color[3 * indexImage + 1] = 0;
 		color[3 * indexImage + 2] = 0;
 	}
-
 
 }
 

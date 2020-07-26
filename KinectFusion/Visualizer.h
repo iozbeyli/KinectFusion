@@ -28,8 +28,12 @@
 
 #define KINECT 0
 
-//Set this macro to 1 if you use model-to-frame alignment
+// Set this macro to 1 if you use model-to-frame alignment
 #define MODEL_TO_FRAME 1
+
+// Set this macro to one for using the sdf gradients as normals
+// assumes model to frame is used, o/w can cause problems
+#define USE_GRADIENT_NORMALS 0
 
 #if KINECT
 	#include "KinectSensor.h"
@@ -41,19 +45,22 @@ public:
 
 	Visualizer(int skip = 1) :	sensor(skip), 
 								filterer(640,480,true),
-								filtererModel(640, 480, false),
+								filtererModel(640, 480, false, USE_GRADIENT_NORMALS && MODEL_TO_FRAME),
 								backProjector(640, 480), 
 								normalCalculator(640, 480), 
 								backProjectorModel(640, 480),
-								normalCalculatorModel(640, 480),
+								//normalCalculatorModel(640, 480),
 								poseEstimator(640, 480, 10, 1.0f),
 								prevBackProjector(640, 480), 
+#if USE_GRADIENT_NORMALS // No need to allocate prev normal calculator in this case
+#else
 								prevNormalCalculator(640, 480),
+#endif
 								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
 								poseEstimatorSecondLevel(160, 120, 4, 0.25f),
-								volume(640, 480, 0.06, 500, 0.01, 2),
+								volume(640, 480, 0.06, 500, 0.01, 1),
 								raycaster(640, 480, 0.06, 500, 0.01),
-								tsdf{}
+								tsdf(640, 480)
 	{
 		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
 		
@@ -93,7 +100,7 @@ public:
 			exit(1);
 		}
 
-		if (!normalCalculatorModel.isOK())
+		if (!prevNormalCalculator.isOK())
 		{
 			std::cerr << "Failed to initialize the normal calculator model!\nCheck your gpu memory!" << std::endl;
 			exit(1);
@@ -129,6 +136,14 @@ public:
 			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(volume.status()) << std::endl;
 			exit(1);
 		}
+
+		if (!tsdf.isOk())
+		{
+			std::cerr << "Failed to initialize the tsdf for calculating the truncated signed distance field!\nCheck your gpu memory!" << std::endl;
+			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(tsdf.status()) << std::endl;
+			exit(1);
+		}
+
 
 		if (!raycaster.isOk())
 		{
@@ -178,7 +193,16 @@ public:
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(), Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 
-		// Pose estimation
+		auto getPrevNormal = [&](int level) {
+			bool useGrad = MODEL_TO_FRAME && USE_GRADIENT_NORMALS;
+			return useGrad ? Instance->filtererModel.getNormalsGPU(level) : Instance->prevNormalCalculator.getOutputGPU(level);
+		};
+
+		auto getPrevMask = [&](int level) {
+			bool useGrad = MODEL_TO_FRAME && USE_GRADIENT_NORMALS;
+			return useGrad ? Instance->filtererModel.getValidMaskGPU(level) : Instance->prevNormalCalculator.getValidMaskGPU(level);
+		};
+
 		if (Instance->frameNumber > 0)
 		{
 			std::cout << Instance->frameNumber << std::endl;
@@ -186,9 +210,10 @@ public:
 			if (Instance->poseEstimatorSecondLevel.apply(Instance->backProjector.getOutputGPU(2),
 				Instance->prevBackProjector.getOutputGPU(2),
 				Instance->normalCalculator.getOutputGPU(2),
-				Instance->prevNormalCalculator.getOutputGPU(2),
+				getPrevNormal(2),
 				Instance->normalCalculator.getValidMaskGPU(2),
-				Instance->prevNormalCalculator.getValidMaskGPU(2)))
+				getPrevMask(2))
+				)
 			{
 				Instance->poseEstimatorFirstLevel.setParams(Instance->poseEstimatorSecondLevel.getParamVector());
 				if (Instance->poseEstimatorFirstLevel.apply(Instance->backProjector.getOutputGPU(1),
@@ -249,7 +274,8 @@ public:
 
 		// Fuse surface into model
 		Instance->tsdf.apply(
-			Instance->volume, Instance->filterer.getInputGPU(), Instance->normalCalculator.getValidMaskGPU(-1), 
+			Instance->volume, Instance->filterer.getInputGPU(), 
+			Instance->normalCalculator.getValidMaskGPU(-1), Instance->normalCalculator.getOutputGPU(-1),
 			Instance->sensor.GetColorRGBX(), Instance->currentTransform
 		);
 
@@ -287,11 +313,12 @@ public:
 				{
 					int index = (y * 640 + x);
 					unsigned char* ptr = Instance->normalTexture->bits + 3 * index;
+					unsigned char* ptrColor = Instance->colorTexture->bits + 3 * index;
 					//unsigned char* ptr = Instance->depthTexture->bits + index;
 					unsigned char* ptrUnfiltered = Instance->depthTextureUnfiltered->bits + index;
-					/*float currentX = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[3 * index], -1) + 1.0f) * 127.5f;
+					float currentX = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[3 * index], -1) + 1.0f) * 127.5f;
 					float currentY = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index) + 1], -1) + 1.0f) * 127.5f;
-					float currentZ = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index) + 2], -1) + 1.0f) * 127.5f;*/
+					float currentZ = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index) + 2], -1) + 1.0f) * 127.5f;
 
 					/*if (Instance->frameNumber==69)
 					{
@@ -302,9 +329,9 @@ public:
 					float currentUnfiltered = (std::fmaxf(Instance->raycaster.getOutputDepthCPU()[index], 0) / 5) * 255;
 					float current = ((std::fmaxf(Instance->depthImage[index], 0) / 5) * 255);
 					//float currentUnfiltered = std::fabsf((std::fmaxf(std::abs(Instance->depthImage[index] - Instance->raycaster.getOutputDepthCPU()[index]), 0) / 5) * 255);
-					/*ptr = (unsigned char)std::fminf(currentX, 255);
-					*(ptr + 1) = (unsigned char)std::fminf(currentY, 255);
-					*(ptr + 2) = (unsigned char)std::fminf(currentZ, 255);*/
+					*ptrColor = (unsigned char)std::fminf(currentX, 255);
+					*(ptrColor + 1) = (unsigned char)std::fminf(currentY, 255);
+					*(ptrColor + 2) = (unsigned char)std::fminf(currentZ, 255);
 					*ptr = Instance->raycaster.getOutputColorCPU()[3 * index];
 					*(ptr + 1) = Instance->raycaster.getOutputColorCPU()[3 * index + 1];
 					*(ptr + 2) = Instance->raycaster.getOutputColorCPU()[3 * index + 2];
@@ -336,13 +363,17 @@ public:
 			glBindTexture(GL_TEXTURE_2D, tobj->id);
 			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);
 
+			TextureObject* tobjColor = Instance->colorTexture;
+			glBindTexture(GL_TEXTURE_2D, tobjColor->id);
+			glTexImage2D(GL_TEXTURE_2D, 0, tobjColor->internalFormat, tobjColor->width, tobjColor->height, 0, tobjColor->imageFormat, GL_UNSIGNED_BYTE, tobjColor->bits);
+
 			/*TextureObject* tobj = Instance->depthTexture;
 			glBindTexture(GL_TEXTURE_2D, tobj->id);
 			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);*/
 
-			TextureObject* tobjFirstLevel = Instance->depthTextureFirstLevel;
+			/*TextureObject* tobjFirstLevel = Instance->depthTextureFirstLevel;
 			glBindTexture(GL_TEXTURE_2D, tobjFirstLevel->id);
-			glTexImage2D(GL_TEXTURE_2D, 0, tobjFirstLevel->internalFormat, tobjFirstLevel->width, tobjFirstLevel->height, 0, tobjFirstLevel->imageFormat, GL_UNSIGNED_BYTE, tobjFirstLevel->bits);
+			glTexImage2D(GL_TEXTURE_2D, 0, tobjFirstLevel->internalFormat, tobjFirstLevel->width, tobjFirstLevel->height, 0, tobjFirstLevel->imageFormat, GL_UNSIGNED_BYTE, tobjFirstLevel->bits);*/
 
 			TextureObject* tobjSecondLevel = Instance->depthTextureSecondLevel;
 			glBindTexture(GL_TEXTURE_2D, tobjSecondLevel->id);
@@ -354,20 +385,30 @@ public:
 
 		// Set target points for tracking
 #if MODEL_TO_FRAME
+
 		// fill prev objects with model rendering
+#if USE_GRADIENT_NORMALS
+		Instance->filtererModel.applyFilterGPU(Instance->raycaster.getOutputDepthGPU(), Instance->raycaster.getOutputNormalGPU());
+#else
 		Instance->filtererModel.applyFilterGPU(Instance->raycaster.getOutputDepthGPU());
+#endif
 		Instance->prevBackProjector.apply(
 			Instance->raycaster.getOutputDepthGPU(),
 			Instance->filtererModel.getOutputGPU(0),
 			Instance->filtererModel.getOutputGPU(1),
 			Instance->filtererModel.getOutputGPU(2)
 		);
+
+#if USE_GRADIENT_NORMALS
+#else
 		Instance->prevNormalCalculator.apply(
 			Instance->prevBackProjector.getOutputGPU(-1),
 			Instance->prevBackProjector.getOutputGPU(0),
 			Instance->prevBackProjector.getOutputGPU(1),
 			Instance->prevBackProjector.getOutputGPU(2)
 		);
+#endif
+
 #else
 		Instance->prevBackProjector.copy(&Instance->backProjector);
 		Instance->prevNormalCalculator.copy(&Instance->normalCalculator);
@@ -506,8 +547,11 @@ public:
 
 		glTranslatef(0.25f, 0.0f, 0.0f);
 
-		glBindTexture(GL_TEXTURE_2D, Instance->depthTextureFirstLevel->id);
+		glBindTexture(GL_TEXTURE_2D, Instance->colorTexture->id);
 		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+
+		/*glBindTexture(GL_TEXTURE_2D, Instance->depthTextureFirstLevel->id);
+		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);*/
 
 		glTranslatef(0.25f, 0.0f, 0.0f);
 
@@ -561,6 +605,7 @@ public:
 		glutReshapeFunc(reshape);
 		glutKeyboardFunc(keyEvents);
 
+		colorTexture = createTexture(640, 480, GL_RGB, 3);
 		normalTexture = createTexture(640, 480, GL_RGB, 3);
 		depthTextureUnfiltered = createTexture(640, 480, GL_LUMINANCE, 1);
 		depthTexture = createTexture(640, 480, GL_LUMINANCE, 1);
@@ -571,6 +616,7 @@ public:
 
 		destroyKinect();
 
+		destroyTexture(colorTexture);
 		destroyTexture(normalTexture);
 		destroyTexture(depthTexture);
 		destroyTexture(depthTextureFirstLevel);
@@ -592,6 +638,7 @@ private:
 	static Visualizer* Instance;
 	
 	//std::string hudText;
+	TextureObject* colorTexture = nullptr;
 	TextureObject* normalTexture = nullptr;
 	TextureObject* depthTexture = nullptr;
 	TextureObject* depthTextureFirstLevel = nullptr;
@@ -610,7 +657,6 @@ private:
 	BackProjector backProjector;
 	BackProjector backProjectorModel;
 	NormalCalculator normalCalculator;
-	NormalCalculator normalCalculatorModel;
 	BackProjector prevBackProjector;
 	NormalCalculator prevNormalCalculator;
 	PoseEstimator poseEstimator;

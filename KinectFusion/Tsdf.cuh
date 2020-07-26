@@ -8,6 +8,7 @@
 #define X_OFFSET 4
 #define Y_OFFSET 3.5
 #define Z_OFFSET 1.5 
+#define NORMAL_WEIGHT 0
 
 
 __device__ __forceinline__ 
@@ -38,12 +39,22 @@ float3 matrot(const float* m4f, const float3* v)
 	);
 }
 
+__device__ __forceinline__
+float3 voxelToWorld(int3 index, float voxelSize)
+{
+	float3 coord = make_float3((index.x + .5f) * voxelSize, (index.y + .5f) * voxelSize, (index.z + .5f) * voxelSize);
+	coord.x -= X_OFFSET;
+	coord.y -= Y_OFFSET;
+	coord.z -= Z_OFFSET;
+	return coord;
+}
 
 __global__
 void applyTsdf_v4
 (
 	float* gpuFrameDepthMap,
 	bool* gpuFrameValidMask,
+	float* gpuFrameNormals,
 	BYTE* const gpuFrameColorMap,
 	const float* worldToCamera,
 	const float* cameraToWorld,
@@ -75,10 +86,11 @@ void applyTsdf_v4
 	{
 		// SJ: x,y,z are voxel coordinates, so we need to convert them to real world coordinates first.
 		// SJ: Calculate the currents voxel center position in the world coordinate system. 
-		float3 voxelCenterWorldCoord = make_float3((x + .5f) * voxelSize, (y + .5f) * voxelSize, (z + .5f) * voxelSize);
+		float3 voxelCenterWorldCoord = voxelToWorld(make_int3(x, y, z), voxelSize);
+		/*make_float3((x + .5f) * voxelSize, (y + .5f) * voxelSize, (z + .5f) * voxelSize);
 		voxelCenterWorldCoord.x -= X_OFFSET;
 		voxelCenterWorldCoord.y -= Y_OFFSET;
-		voxelCenterWorldCoord.z -= Z_OFFSET;
+		voxelCenterWorldCoord.z -= Z_OFFSET;*/
 
 		// SJ: Transform to camera coordinate system
 		float3 voxelCenterCameraCoord = mul(worldToCamera, &voxelCenterWorldCoord);
@@ -152,7 +164,29 @@ void applyTsdf_v4
 		const int VOXEL_IDX = (voxelCountX * voxelCountY * z) + (voxelCountX * y) + x;
 		const int VOXEL_COLOR_IDX = VOXEL_IDX * 4;
 		const int FRAME_COLOR_IDX = FRAME_IDX * 4;
-		const float W_R = 1.0f;
+		const int FRAME_NORMAL_IDX = FRAME_IDX * 3;
+		float W_R = 1.0f;
+		
+#if NORMAL_WEIGHT
+		float voxelNorm =  l2norm(voxelCenterCameraCoord);
+		if (voxelNorm >= 0.001)
+		{
+			//weight accoring to normals
+			float3 normal = make_float3(
+				gpuFrameNormals[FRAME_NORMAL_IDX],
+				gpuFrameNormals[FRAME_NORMAL_IDX + 1],
+				gpuFrameNormals[FRAME_NORMAL_IDX + 2]);
+			float3 ray = make_float3(
+				voxelCenterCameraCoord.x / voxelNorm, 
+				voxelCenterCameraCoord.y / voxelNorm, 
+				voxelCenterCameraCoord.z / voxelNorm);
+			// TODO: rename dot, mul etc. so we can use cuda functons with float3
+			W_R = fmaxf(
+				fminf(dot(ray.x, ray.y, ray.z, normal.x, normal.y, normal.z), 0.1),
+				fminf(dot(ray.x, ray.y, ray.z, -normal.x, -normal.y, -normal.z), 0.1)
+			);
+		}
+#endif
 
 		float s = (weights[VOXEL_IDX] * sdfs[VOXEL_IDX]) + (W_R * tsdf) / (weights[VOXEL_IDX] + W_R);
 		if (isinf(s)) {
@@ -177,31 +211,44 @@ void applyTsdf_v4
 class Tsdf
 {
 public:
-	bool apply(TsdfVolume& volume, float* gpuFrameDepthMap, bool* gpuFrameValidMask, const BYTE* cpuFrameColorMap, Eigen::Matrix4f& frameCameraToWorld)
+	const size_t COLOR_MAP_SIZE;
+
+	Tsdf(int imageWidth, int imageHeight) : COLOR_MAP_SIZE{ imageWidth * imageHeight * 4 * sizeof(BYTE) }
 	{
-		// SJ: color map is not in GPU memory yet, so let's put it there.
-		const size_t COLOR_MAP_SIZE = volume.FRAME_WIDTH * volume.FRAME_HEIGHT * 4 * sizeof(BYTE);
 
 		cudaStatus = cudaMalloc((void**)&gpuFrameColorMap, COLOR_MAP_SIZE);
-
 		if (cudaStatus != cudaSuccess)
-			return false;
-
-		cudaStatus = cudaMemcpy(gpuFrameColorMap, cpuFrameColorMap, COLOR_MAP_SIZE, cudaMemcpyHostToDevice);
-
-		if (cudaStatus != cudaSuccess)
-			return false;
+		{
+			return;
+		}
 
 		cudaStatus = cudaMalloc((void**)&gpuCameraToWorld, 16 * sizeof(float));
+		if (cudaStatus != cudaSuccess)
+		{
+			return;
+		}
+
+		cudaStatus = cudaMalloc((void**)&gpuWorldToCamera, 16 * sizeof(float));
 
 		if (cudaStatus != cudaSuccess)
-			return false;
+		{
+			return;
+		}
+	}
+
+	bool apply(TsdfVolume& volume, float* gpuFrameDepthMap, bool* gpuFrameValidMask, float* gpuFrameNormals, const BYTE* cpuFrameColorMap, Eigen::Matrix4f& frameCameraToWorld)
+	{
+		// SJ: color map is not in GPU memory yet, so let's put it there.
+
 
 		//std::cout << frameCameraToWorld << std::endl;
 		//std::cout << frameCameraToWorld.block(0, 3, 3, 1) << std::endl;
 		//frameCameraToWorld.block(0, 3, 3, 1) = frameCameraToWorld.block(0, 3, 3, 1) * (-5);
 		//std::cout << frameCameraToWorld << std::endl;
+		cudaStatus = cudaMemcpy(gpuFrameColorMap, cpuFrameColorMap, COLOR_MAP_SIZE, cudaMemcpyHostToDevice);
 
+		if (cudaStatus != cudaSuccess)
+			return false;
 		cudaStatus = cudaMemcpy(gpuCameraToWorld, frameCameraToWorld.data(), 16 * sizeof(float), cudaMemcpyHostToDevice);
 
 		if (cudaStatus != cudaSuccess)
@@ -211,12 +258,7 @@ public:
 
 		// std::cout << worldToCamera << std::endl;
 
-		cudaStatus = cudaMalloc((void**)&gpuWorldToCamera, 16 * sizeof(float));
-
-		if (cudaStatus != cudaSuccess)
-			return false;
-
-		cudaStatus = cudaMemcpy(gpuWorldToCamera, worldToCamera.data(), 16*sizeof(float), cudaMemcpyHostToDevice);
+		cudaStatus = cudaMemcpy(gpuWorldToCamera, worldToCamera.data(), 16 * sizeof(float), cudaMemcpyHostToDevice);
 
 		if (cudaStatus != cudaSuccess)
 			return false;
@@ -226,12 +268,13 @@ public:
 
 		// SJ: (N + x - 1) / x gives us the smallest multiple of x greater or equal to N.
 		// SJ: So we have one thread per row in z-direction to calculate the voxel values.
-		dim3 blocks((volume.VOXEL_COUNT_X + threads.x - 1) / threads.x, 
-					(volume.VOXEL_COUNT_Y + threads.y - 1) / threads.y);
+		dim3 blocks((volume.VOXEL_COUNT_X + threads.x - 1) / threads.x,
+			(volume.VOXEL_COUNT_Y + threads.y - 1) / threads.y);
 
-		applyTsdf_v4<<<threads, blocks>>>(
+		applyTsdf_v4 << <threads, blocks >> > (
 			gpuFrameDepthMap,
 			gpuFrameValidMask,
+			gpuFrameNormals,
 			gpuFrameColorMap,
 			gpuWorldToCamera,
 			gpuCameraToWorld,
@@ -240,7 +283,7 @@ public:
 			volume.colors,
 			volume.FRAME_WIDTH,
 			volume.FRAME_HEIGHT,
-			volume.VOXEL_COUNT_X, 
+			volume.VOXEL_COUNT_X,
 			volume.VOXEL_COUNT_Y,
 			volume.VOXEL_COUNT_Z,
 			volume.VOXEL_SIZE,
@@ -252,11 +295,11 @@ public:
 			volume.VOXEL_MAX_WEIGHT
 			);
 
-		cudaThreadSynchronize();
+		//cudaThreadSynchronize();
 
-		cudaFree(gpuFrameColorMap);
-		cudaFree(gpuWorldToCamera);
-		cudaFree(gpuCameraToWorld);
+		//cudaFree(gpuFrameColorMap);
+		//cudaFree(gpuWorldToCamera);
+		//cudaFree(gpuCameraToWorld);
 
 		return true;
 	}
@@ -271,10 +314,17 @@ public:
 		return cudaStatus;
 	}
 
+	~Tsdf()
+	{
+		cudaFree(gpuFrameColorMap);
+		cudaFree(gpuWorldToCamera);
+		cudaFree(gpuCameraToWorld);
+	}
 
 private:
-	BYTE* gpuFrameColorMap;
-	float* gpuWorldToCamera;
-	float* gpuCameraToWorld;
+	BYTE* gpuFrameColorMap=nullptr;
+	float* gpuWorldToCamera=nullptr;
+	float* gpuCameraToWorld=nullptr;
+	bool ok = true;
 	cudaError_t cudaStatus;
 };
