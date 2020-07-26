@@ -101,10 +101,12 @@
     <ClInclude Include="GLUtilities.h" />
     <ClInclude Include="KinectSensor.h" />
     <ClInclude Include="MarchingCubes.h" />
+    <ClInclude Include="MeshExporter.h" />
     <ClInclude Include="NormalCalculation.cuh" />
     <ClInclude Include="NormalCalculationEigen.h" />
     <ClInclude Include="PoseEstimator.cuh" />
     <ClInclude Include="Raycaster.cuh" />
+    <ClInclude Include="RayCasting.cuh" />
     <ClInclude Include="Sensor.h" />
     <ClInclude Include="SimpleMesh.h" />
     <ClInclude Include="TextureManager.h" />

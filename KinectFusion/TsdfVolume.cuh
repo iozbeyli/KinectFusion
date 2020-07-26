@@ -10,40 +10,48 @@ public:
 	float* sdf;
 	float* weights;
 	BYTE* colors;
-	
+
 	float* cpuSdf;
 	float* cpuWeights;
+	BYTE* cpuColors;
 
-	const UINT FRAME_WIDTH;
-	const UINT FRAME_HEIGHT;
-	const float TRUNCATION;
-	const UINT VOXEL_COUNT_X;
-	const UINT VOXEL_COUNT_Y;
-	const UINT VOXEL_COUNT_Z;
-	const float VOXEL_SIZE;
-	const float VOXEL_MAX_WEIGHT;
-	float FOV_X;
-	float FOV_Y;
-	float CENTER_FOV_X;
-	float CENTER_FOV_Y;
+	const UINT frameWidth;
+	const UINT frameHeight;
+	const float truncation;
+	const UINT voxelCountX;
+	const UINT voxelCountY;
+	const UINT voxelCountZ;
+	const float voxelSize;
+	const float maxVoxelWeight;
+	float fovX;
+	float fovY;
+	float fovCenterX;
+	float fovCenterY;
 
-	TsdfVolume(const UINT frameWidth, const UINT frameHeight, const float truncation, const UINT voxelCount,
-		const float voxelSize, const float voxelMaxWeight)
-		: FRAME_WIDTH{ frameWidth }
-		, FRAME_HEIGHT{ frameHeight }
-		, TRUNCATION{ truncation }
-		, VOXEL_COUNT_X{ voxelCount }
-		, VOXEL_COUNT_Y{ voxelCount }
-		, VOXEL_COUNT_Z{ voxelCount }
-		, VOXEL_SIZE{ voxelSize }
-		, VOXEL_MAX_WEIGHT{ voxelMaxWeight }
-		, FOV_X{ 0.0f }
-		, FOV_Y{ 0.0f }
-		, CENTER_FOV_X{ 0.0f }
-		, CENTER_FOV_Y{ 0.0f }
+	TsdfVolume
+	(
+		const UINT frameWidth,
+		const UINT frameHeight,
+		const float truncation,
+		const UINT voxelCount,
+		const float voxelSize,
+		const float voxelMaxWeight
+	)
+		: frameWidth{ frameWidth }
+		, frameHeight{ frameHeight }
+		, truncation{ truncation }
+		, voxelCountX{ voxelCount }
+		, voxelCountY{ voxelCount }
+		, voxelCountZ{ voxelCount }
+		, voxelSize{ voxelSize }
+		, maxVoxelWeight{ voxelMaxWeight }
+		, fovX{ 0.0f }
+		, fovY{ 0.0f }
+		, fovCenterX{ 0.0f }
+		, fovCenterY{ 0.0f }
 	{
-		const size_t VOLUME_SIZE = VOXEL_COUNT_X* VOXEL_COUNT_Y* VOXEL_COUNT_Z * sizeof(float);
-		const size_t VOLUME_COLOR_SIZE = VOXEL_COUNT_X * VOXEL_COUNT_Y * VOXEL_COUNT_Z * 4 * sizeof(BYTE);
+		const size_t VOLUME_SIZE = voxelCountX * voxelCountY * voxelCountZ * sizeof(float);
+		const size_t VOLUME_COLOR_SIZE = voxelCountX * voxelCountY * voxelCountZ * 4 * sizeof(BYTE);
 
 		cudaStatus = cudaMalloc((void**)&sdf, VOLUME_SIZE);
 
@@ -74,6 +82,7 @@ public:
 
 		cpuSdf = (float*)malloc(VOLUME_SIZE);
 		cpuWeights = (float*)malloc(VOLUME_SIZE);
+		cpuColors = (BYTE*)malloc(VOLUME_COLOR_SIZE);
 	}
 
 	bool isOk()
@@ -83,15 +92,16 @@ public:
 
 	void setIntrinsics(float f_X, float f_Y, float c_X, float c_Y)
 	{
-		FOV_X = f_X;
-		FOV_Y = f_Y;
-		CENTER_FOV_X = c_X;
-		CENTER_FOV_Y = c_Y;
+		fovX = f_X;
+		fovY = f_Y;
+		fovCenterX = c_X;
+		fovCenterY = c_Y;
 	}
 
 	bool copyToCPU()
 	{
-		const size_t VOLUME_SIZE = VOXEL_COUNT_X * VOXEL_COUNT_Y * VOXEL_COUNT_Z * sizeof(float);
+		const size_t VOLUME_SIZE = voxelCountX * voxelCountY * voxelCountZ * sizeof(float);
+		const size_t VOLUME_COLOR_SIZE = voxelCountX * voxelCountY * voxelCountZ * 4 * sizeof(BYTE);
 
 		cudaStatus = cudaMemcpy(cpuSdf, sdf, VOLUME_SIZE, cudaMemcpyDeviceToHost);
 
@@ -100,7 +110,17 @@ public:
 
 		cudaStatus = cudaMemcpy(cpuWeights, weights, VOLUME_SIZE, cudaMemcpyDeviceToHost);
 
+		if (cudaStatus != cudaSuccess)
+			return false;
+
+		cudaStatus = cudaMemcpy(cpuColors, colors, VOLUME_COLOR_SIZE, cudaMemcpyDeviceToHost);
+
 		return cudaStatus == cudaSuccess;
+	}
+
+	inline const unsigned int idx(const int x, const int y, const int z) noexcept
+	{
+		return (voxelCountX * voxelCountY * z) + (voxelCountX * y) + x;
 	}
 
 	cudaError_t status()
@@ -113,6 +133,10 @@ public:
 		cudaFree(sdf);
 		cudaFree(weights);
 		cudaFree(colors);
+
+		delete[] cpuSdf;
+		delete[] cpuWeights;
+		delete[] cpuColors;
 	}
 
 private:

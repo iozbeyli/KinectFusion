@@ -22,7 +22,7 @@
 
 #include "Volume.h"
 #include "SimpleMesh.h"
-#include "MarchingCubes.h"
+#include "MeshExporter.h"
 
 #include "RayCasting.cuh"
 
@@ -51,11 +51,11 @@ public:
 								prevNormalCalculator(640, 480),
 								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
 								poseEstimatorSecondLevel(160, 120, 4, 0.25f),
-								volume(640, 480, 0.06, 500, 0.01, 2),
+								volume(640, 480, 0.06, 500, 0.01, 1),
 								raycaster(640, 480, 0.06, 500, 0.01),
 								tsdf{}
 	{
-		std::string filenameIn = "../data/rgbd_dataset_freiburg1_xyz/";
+		std::string filenameIn = R"(c:\tmp\rgbd_dataset_freiburg1_xyz\)";
 		
 		if (!sensor.Init(filenameIn))
 		{
@@ -215,8 +215,14 @@ public:
 			}
 		}
 
-
-
+		// Export Mesh
+		//if (Instance->frameNumber == 750)
+		//{
+		//	std::cout << "Exporting Mesh ..." << std::endl;
+		//	exportMesh();
+		//	std::cout << "Finished!" << std::endl;
+		//	exit(0);
+		//}
 
 		if ((Instance->frameNumber % 10 == 11) && Instance->backProjector.copyToCPU())
 		{
@@ -380,74 +386,8 @@ public:
 		if (!Instance->volume.copyToCPU())
 			return;
 
-		std::string filenameOut{ "tsdf.off" };
-
-		unsigned int mc_res = 500; // resolution of the grid, for debugging you can reduce the resolution (-> faster)
-		Volume vol(Vector3d(-5, -5, -5), Vector3d(5, 5, 5), mc_res, mc_res, mc_res, 1);
-
-		std::cout << vol.getDimX() << " " << vol.getDimY() << " " << vol.getDimY() << std::endl;
-
-		UINT infcount = 0;
-		UINT nancount = 0;
-
-		for (unsigned int x = 0; x < vol.getDimX(); x++)
-		{
-			for (unsigned int y = 0; y < vol.getDimY(); y++)
-			{
-				for (unsigned int z = 0; z < vol.getDimZ(); z++)
-				{
-					Eigen::Vector3d p = vol.pos(x, y, z);
-					// set value from tsdf Voume
-					const int voxelCount = Instance->volume.VOXEL_COUNT_X;
-					const UINT VOLUME_IDX = (voxelCount * voxelCount * z) + (voxelCount * y) + x;
-
-					double val = Instance->volume.cpuSdf[VOLUME_IDX];
-
-					if (isinf(val))
-					{
-						vol.set(x, y, z, 0);
-						infcount++;
-						continue;
-					}
-
-					if (isnan(val))
-					{
-						vol.set(x, y, z, 0);
-						nancount++;
-						continue;
-					}
-					vol.set(x, y, z, val);
-				}
-			}
-		}
-
-		std::cout << "Infinity values: " << infcount << " NAN values: " << nancount << std::endl;
-
-		// extract the zero iso-surface using marching cubes
-		SimpleMesh mesh;
-		for (unsigned int x = 0; x < vol.getDimX() - 1; x++)
-		{
-			// std::cerr << "Marching Cubes on slice " << x << " of " << vol.getDimX() << std::endl;
-
-			for (unsigned int y = 0; y < vol.getDimY() - 1; y++)
-			{
-				for (unsigned int z = 0; z < vol.getDimZ() - 1; z++)
-				{
-					const int voxelCount = Instance->volume.VOXEL_COUNT_X;
-					const UINT VOLUME_IDX = (voxelCount * voxelCount * z) + (voxelCount * y) + x;
-					float weight = Instance->volume.cpuWeights[VOLUME_IDX];
-
-					if (weight > 0)
-						ProcessVolumeCell(&vol, x, y, z, 0.00f, &mesh);
-				}
-			}
-		}
-
-		// write mesh to file
-		if (!mesh.WriteMesh(filenameOut))
-		{
-			std::cout << "ERROR: unable to write output file!" << std::endl;
-		}
+		MeshExporter me{ Instance->volume, 0.0f };
+		me.exportMesh("tsdf.off");
 	}
 
 	static void update()

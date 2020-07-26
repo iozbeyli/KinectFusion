@@ -8,7 +8,18 @@
 
 #include "Eigen.h"
 
-typedef Eigen::Vector3f Vertex;
+// typedef Eigen::Vector3f Vertex;
+
+struct Vertex
+{
+	Eigen::Vector3f p;
+	Eigen::Vector4i c;
+
+	Vertex(float x, float y, float z, float r, float g, float b, float a)
+		: p{ x, y, z }
+		, c{ r, g, b, a }
+	{}
+};
 
 struct Triangle
 {
@@ -23,6 +34,10 @@ struct Triangle
 class SimpleMesh
 {
 public:
+
+	SimpleMesh(bool colored = true)
+		: colored{colored}
+	{}
 
 	void Clear()
 	{
@@ -62,13 +77,21 @@ public:
 		if (!outFile.is_open()) return false;
 
 		// write header
-		outFile << "OFF" << std::endl;
+		outFile << (colored ? "COFF" : "OFF") << std::endl;
 		outFile << m_vertices.size() << " " << m_triangles.size() << " 0" << std::endl;
 
-		// save vertices
+		// save vertices with colors
 		for (unsigned int i = 0; i<m_vertices.size(); i++)
 		{
-			outFile << m_vertices[i].x() << " " << m_vertices[i].y() << " " << m_vertices[i].z() << std::endl;
+			if (colored)
+			{
+				outFile << m_vertices[i].p.x() << " " << m_vertices[i].p.y() << " " << m_vertices[i].p.z() << " ";
+				outFile << m_vertices[i].c.x() << " " << m_vertices[i].c.y() << " " << m_vertices[i].c.z() << " " << m_vertices[i].c.w() << std::endl;
+			}
+			else
+			{
+				outFile << m_vertices[i].p.x() << " " << m_vertices[i].p.y() << " " << m_vertices[i].p.z() << std::endl;
+			}
 		}
 
 		// save faces
@@ -86,6 +109,7 @@ public:
 private:
 	std::vector<Vertex> m_vertices;
 	std::vector<Triangle> m_triangles;
+	bool colored;
 };
 
 class PointCloud

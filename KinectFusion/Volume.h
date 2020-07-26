@@ -6,6 +6,7 @@
 #include <limits>
 #include "Eigen.h"
 typedef unsigned int uint;
+typedef unsigned char BYTE;
 
 //! A regular volume dataset
 class Volume
@@ -54,6 +55,11 @@ public:
 		vol[getPosFromTuple(x_, y_, z_)] = val;
 	};
 
+	inline void setColor(uint x_, uint y_, uint z_, BYTE* c)
+	{
+		vol_colors[getPosFromTuple(x_, y_, z_)] = c;
+	}
+
 	//! Get the value at (x_, y_, z_).
 	inline double get(uint i) const
 	{
@@ -64,6 +70,11 @@ public:
 	inline double get(uint x_, uint y_, uint z_) const
 	{
 		return vol[getPosFromTuple(x_, y_, z_)];
+	};
+
+	inline BYTE* getColor(uint x_, uint y_, uint z_) const
+	{
+		return vol_colors[getPosFromTuple(x_, y_, z_)];
 	};
 
 	//! Get the value at (pos.x, pos.y, pos.z).
@@ -150,6 +161,7 @@ public:
 	uint dx, dy, dz;
 
 	double* vol;
+	BYTE** vol_colors;
 
 	double maxValue, minValue;
 

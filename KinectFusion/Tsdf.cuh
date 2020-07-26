@@ -180,7 +180,7 @@ public:
 	bool apply(TsdfVolume& volume, float* gpuFrameDepthMap, bool* gpuFrameValidMask, const BYTE* cpuFrameColorMap, Eigen::Matrix4f& frameCameraToWorld)
 	{
 		// SJ: color map is not in GPU memory yet, so let's put it there.
-		const size_t COLOR_MAP_SIZE = volume.FRAME_WIDTH * volume.FRAME_HEIGHT * 4 * sizeof(BYTE);
+		const size_t COLOR_MAP_SIZE = volume.frameWidth * volume.frameHeight * 4 * sizeof(BYTE);
 
 		cudaStatus = cudaMalloc((void**)&gpuFrameColorMap, COLOR_MAP_SIZE);
 
@@ -226,8 +226,8 @@ public:
 
 		// SJ: (N + x - 1) / x gives us the smallest multiple of x greater or equal to N.
 		// SJ: So we have one thread per row in z-direction to calculate the voxel values.
-		dim3 blocks((volume.VOXEL_COUNT_X + threads.x - 1) / threads.x, 
-					(volume.VOXEL_COUNT_Y + threads.y - 1) / threads.y);
+		dim3 blocks((volume.voxelCountX + threads.x - 1) / threads.x, 
+					(volume.voxelCountY + threads.y - 1) / threads.y);
 
 		applyTsdf_v4<<<threads, blocks>>>(
 			gpuFrameDepthMap,
@@ -238,19 +238,20 @@ public:
 			volume.sdf,
 			volume.weights,
 			volume.colors,
-			volume.FRAME_WIDTH,
-			volume.FRAME_HEIGHT,
-			volume.VOXEL_COUNT_X, 
-			volume.VOXEL_COUNT_Y,
-			volume.VOXEL_COUNT_Z,
-			volume.VOXEL_SIZE,
-			volume.FOV_X,
-			volume.FOV_Y,
-			volume.CENTER_FOV_X,
-			volume.CENTER_FOV_Y,
-			volume.TRUNCATION,
-			volume.VOXEL_MAX_WEIGHT
+			volume.frameWidth,
+			volume.frameHeight,
+			volume.voxelCountX, 
+			volume.voxelCountY,
+			volume.voxelCountZ,
+			volume.voxelSize,
+			volume.fovX,
+			volume.fovY,
+			volume.fovCenterX,
+			volume.fovCenterY,
+			volume.truncation,
+			volume.maxVoxelWeight
 			);
+
 
 		cudaThreadSynchronize();
 

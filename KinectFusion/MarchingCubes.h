@@ -6,14 +6,22 @@
 #include "SimpleMesh.h"
 #include "Volume.h"
 
-struct MC_Triangle {
+struct MC_Vertex
+{
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	Vector3d p[3];
+	Vector3d p;
+	Vector4i c;
+};
+
+struct MC_Triangle 
+{
+	MC_Vertex v[3];
 };
 
 struct MC_Gridcell {
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	Vector3d p[8];
+	BYTE* c[8];
 	double val[8];
 };
 
@@ -326,24 +334,6 @@ an edge between two vertices, each with their own scalar value
 */
 Vector3d VertexInterp(double isolevel, const Vector3d& p1, const Vector3d& p2, double valp1, double valp2)
 {
-
-	// TODO: implement the linear interpolant
-	// Assume that the function value at 'p1' is 'valp1' and the function value at 'p2' is 'valp2'.
-	// Further assume that the function is linear between 'p1' and 'p2'. Compute and return the
-	// point 'p' on the line from 'p1' to 'p2' where the function takes on the value 'isolevel'
-	//
-	//       f(p2) = valp2
-	//       x
-	//      /
-	//     x f(p) = isolevel
-	//    /
-	//   /
-	//  /
-	// x
-	// f(p1) = valp1
-
-	// return (p1+p2)/2; // replace me
-
 	// SJ: One value has to be positive, one negative otherwise we wouldn't interpolate this edge.
 	// SJ: We start with identifying which point has the smaller value and which the larger.
 	Vector3d negPoint = p1;
@@ -370,45 +360,37 @@ Vector3d VertexInterp(double isolevel, const Vector3d& p1, const Vector3d& p2, d
 	return negPoint + distance * value_proportion;
 }
 
-Vector3d VertexInterp_v2(double isolevel, const Vector3d& p1, const Vector3d& p2, double valp1, double valp2)
+Vector4i ColorInterp(double isolevel, MC_Gridcell&  gridCell, int idxFst, int idxSnd)
 {
-	float mu;
-	Vector3d p;
+	double v1 = gridCell.val[idxFst];
+	double v2 = gridCell.val[idxSnd];
 
-	// If jump is too big, return a point with x index -1 to indicate it's false
-	if (std::abs(valp1 - valp2) > 0.95) {
-		p.x() = -1;
-		return(p);
-	}
+	double t = (isolevel - v1) / (v2 - v1);
 
-	if (std::abs(isolevel - valp1) < 0.00001) {
-		return p1;
-	}
+	BYTE* cf = gridCell.c[idxFst];
+	BYTE* cs = gridCell.c[idxSnd];
+	unsigned int r1 = cf[0];
+	unsigned int r2 = cs[0];
+	unsigned int g1 = cf[1];
+	unsigned int g2 = cs[1];
+	unsigned int b1 = cf[2];
+	unsigned int b2 = cs[2];
 
-	if (std::abs(isolevel - valp2) < 0.00001) {
-		return p2;
-	}
+	int r = static_cast<int>(floorf((1 - t) * r1 + t * r2));
+	int g = static_cast<int>(floorf((1 - t) * g1 + t * g2));
+	int b = static_cast<int>(floorf((1 - t) * b1 + t * b2));
+	//int r = static_cast<int>(floorf((1 - t) * cf[0] + t * cs[0]));
+	//int g = static_cast<int>(floorf((1 - t) * cf[1] + t * cs[1]));
+	//int b = static_cast<int>(floorf((1 - t) * cf[2] + t * cs[2]));
+	int a = 255;
 
-	if (std::abs(valp1 - valp2) < 0.00001) {
-		return p1;
-	}
+	if (r < 0 || g < 0 || b < 0)
+		return Eigen::Vector4i(0, 0, 0, 0);
 
-	mu = (isolevel - valp1) / (valp2 - valp1);
+	if(r > 255 || g > 255 || b > 255)
+		return Eigen::Vector4i(255, 255, 255, 255);
 
-	p.x() = p1.x() + mu * (p2.x() - p1.x());
-	p.y() = p1.y() + mu * (p2.y() - p1.y());
-	p.z() = p1.z() + mu * (p2.z() - p1.z());
-	
-	return p;
-}
-
-Vector3d VertexInterp_v3(double isolevel, const Vector3d& p1, const Vector3d& p2, double valp1, double valp2)
-{
-	double t = (isolevel - valp1) / (valp2 - valp1);
-
-	Vector3d r = p1 + t * (p2 - p1);
-
-	return r;
+	return Eigen::Vector4i(r,g,b,a);
 }
 
 /*
@@ -419,11 +401,11 @@ will be loaded up with the vertices at most 5 triangular facets.
 0 will be returned if the grid cell is either totally above
 or totally below the isolevel.
 */
-int Polygonise(MC_Gridcell grid, double isolevel, MC_Triangle* triangles) {
+int Polygonise(MC_Gridcell& gridCell, double isolevel, MC_Triangle* triangles) {
 
 	int ntriang;
 	int cubeindex;
-	Vector3d vertlist[12];
+	MC_Vertex vertlist[12];
 
 	// SJ: Create the index into the edgeTable
 	// SJ: We look at all corners of a cube, if the distance to the suface of a corner is < isoleve we set 1 otherwise 0
@@ -431,14 +413,14 @@ int Polygonise(MC_Gridcell grid, double isolevel, MC_Triangle* triangles) {
 	// SJ: The edgeTable tells us which edges of the cube we have to consider by returning a 12-bit value (because 12 edges).
 	// SJ: If a bit is 1 = consider, 0 = don't
 	cubeindex = 0;
-	if (grid.val[0] < isolevel) cubeindex |= 1;
-	if (grid.val[1] < isolevel) cubeindex |= 2;
-	if (grid.val[2] < isolevel) cubeindex |= 4;
-	if (grid.val[3] < isolevel) cubeindex |= 8;
-	if (grid.val[4] < isolevel) cubeindex |= 16;
-	if (grid.val[5] < isolevel) cubeindex |= 32;
-	if (grid.val[6] < isolevel) cubeindex |= 64;
-	if (grid.val[7] < isolevel) cubeindex |= 128;
+	if (gridCell.val[0] < isolevel) cubeindex |= 1;
+	if (gridCell.val[1] < isolevel) cubeindex |= 2;
+	if (gridCell.val[2] < isolevel) cubeindex |= 4;
+	if (gridCell.val[3] < isolevel) cubeindex |= 8;
+	if (gridCell.val[4] < isolevel) cubeindex |= 16;
+	if (gridCell.val[5] < isolevel) cubeindex |= 32;
+	if (gridCell.val[6] < isolevel) cubeindex |= 64;
+	if (gridCell.val[7] < isolevel) cubeindex |= 128;
 
 	/* Cube is entirely in/out of the surface */
 	// SJ: The first and the last index of the edgeTable is 0x00 meaning that all corners of the cube are either
@@ -450,57 +432,87 @@ int Polygonise(MC_Gridcell grid, double isolevel, MC_Triangle* triangles) {
 	// SJ: We now check for each edge if we have to interpolate a vertex on that edge and save that vertex in out vertex list.
 	// SJ: The vertexlist contains all the vertices, that we need to triangulate in the next step.
 	if (edgeTable[cubeindex] & 1)
-		vertlist[0] = VertexInterp(isolevel, grid.p[0], grid.p[1], grid.val[0], grid.val[1]);
-	if (edgeTable[cubeindex] & 2)
-		vertlist[1] = VertexInterp(isolevel, grid.p[1], grid.p[2], grid.val[1], grid.val[2]);
-	if (edgeTable[cubeindex] & 4)
-		vertlist[2] = VertexInterp(isolevel, grid.p[2], grid.p[3], grid.val[2], grid.val[3]);
-	if (edgeTable[cubeindex] & 8)
-		vertlist[3] = VertexInterp(isolevel, grid.p[3], grid.p[0], grid.val[3], grid.val[0]);
-	if (edgeTable[cubeindex] & 16)
-		vertlist[4] = VertexInterp(isolevel, grid.p[4], grid.p[5], grid.val[4], grid.val[5]);
-	if (edgeTable[cubeindex] & 32)
-		vertlist[5] = VertexInterp(isolevel, grid.p[5], grid.p[6], grid.val[5], grid.val[6]);
-	if (edgeTable[cubeindex] & 64)
-		vertlist[6] = VertexInterp(isolevel, grid.p[6], grid.p[7], grid.val[6], grid.val[7]);
-	if (edgeTable[cubeindex] & 128)
-		vertlist[7] = VertexInterp(isolevel, grid.p[7], grid.p[4], grid.val[7], grid.val[4]);
-	if (edgeTable[cubeindex] & 256)
-		vertlist[8] = VertexInterp(isolevel, grid.p[0], grid.p[4], grid.val[0], grid.val[4]);
-	if (edgeTable[cubeindex] & 512)
-		vertlist[9] = VertexInterp(isolevel, grid.p[1], grid.p[5], grid.val[1], grid.val[5]);
-	if (edgeTable[cubeindex] & 1024)
-		vertlist[10] = VertexInterp(isolevel, grid.p[2], grid.p[6], grid.val[2], grid.val[6]);
-	if (edgeTable[cubeindex] & 2048)
-		vertlist[11] = VertexInterp(isolevel, grid.p[3], grid.p[7], grid.val[3], grid.val[7]);
-
-	for (int i = 0; i < 12; ++i)
 	{
-		if (vertlist[i].x() < 0)
-			return 0;
+		vertlist[0].p = VertexInterp(isolevel, gridCell.p[0], gridCell.p[1], gridCell.val[0], gridCell.val[1]);
+		vertlist[0].c = ColorInterp(isolevel, gridCell, 0, 1);
 	}
+	if (edgeTable[cubeindex] & 2)
+	{
+		vertlist[1].p = VertexInterp(isolevel, gridCell.p[1], gridCell.p[2], gridCell.val[1], gridCell.val[2]);
+		vertlist[1].c = ColorInterp(isolevel, gridCell, 1, 2);
+	}
+	if (edgeTable[cubeindex] & 4)
+	{
+		vertlist[2].p = VertexInterp(isolevel, gridCell.p[2], gridCell.p[3], gridCell.val[2], gridCell.val[3]);
+		vertlist[2].c = ColorInterp(isolevel, gridCell, 2, 3);
+	}
+	if (edgeTable[cubeindex] & 8)
+	{
+		vertlist[3].p = VertexInterp(isolevel, gridCell.p[3], gridCell.p[0], gridCell.val[3], gridCell.val[0]);
+		vertlist[3].c = ColorInterp(isolevel, gridCell, 3, 0);
+	}
+	if (edgeTable[cubeindex] & 16)
+	{
+		vertlist[4].p = VertexInterp(isolevel, gridCell.p[4], gridCell.p[5], gridCell.val[4], gridCell.val[5]);
+		vertlist[4].c = ColorInterp(isolevel, gridCell, 4, 5);
+	}
+	if (edgeTable[cubeindex] & 32)
+	{
+		vertlist[5].p = VertexInterp(isolevel, gridCell.p[5], gridCell.p[6], gridCell.val[5], gridCell.val[6]);
+		vertlist[5].c = ColorInterp(isolevel, gridCell, 5, 6);
+	}
+	if (edgeTable[cubeindex] & 64)
+	{
+		vertlist[6].p = VertexInterp(isolevel, gridCell.p[6], gridCell.p[7], gridCell.val[6], gridCell.val[7]);
+		vertlist[6].c = ColorInterp(isolevel, gridCell, 6, 7);
+	}
+	if (edgeTable[cubeindex] & 128)
+	{
+		vertlist[7].p = VertexInterp(isolevel, gridCell.p[7], gridCell.p[4], gridCell.val[7], gridCell.val[4]);
+		vertlist[7].c = ColorInterp(isolevel, gridCell, 7, 4);
+	}
+	if (edgeTable[cubeindex] & 256)
+	{
+		vertlist[8].p = VertexInterp(isolevel, gridCell.p[0], gridCell.p[4], gridCell.val[0], gridCell.val[4]);
+		vertlist[8].c = ColorInterp(isolevel, gridCell, 0, 4);
+	}
+	if (edgeTable[cubeindex] & 512)
+	{
+		vertlist[9].p = VertexInterp(isolevel, gridCell.p[1], gridCell.p[5], gridCell.val[1], gridCell.val[5]);
+		vertlist[9].c = ColorInterp(isolevel, gridCell, 1, 5);
+	}
+	if (edgeTable[cubeindex] & 1024)
+	{
+		vertlist[10].p = VertexInterp(isolevel, gridCell.p[2], gridCell.p[6], gridCell.val[2], gridCell.val[6]);
+		vertlist[10].c = ColorInterp(isolevel, gridCell, 2, 6);
+	}
+	if (edgeTable[cubeindex] & 2048)
+	{
+		vertlist[11].p = VertexInterp(isolevel, gridCell.p[3], gridCell.p[7], gridCell.val[3], gridCell.val[7]);
+		vertlist[11].c = ColorInterp(isolevel, gridCell, 3, 7);
+	}
+
+	//for (int i = 0; i < 12; ++i)
+	//{
+	//	if (vertlist[i].p.x() < 0)
+	//		return 0;
+	//}
 
 	/* Create the triangle */
 	// SJ: The Lookup-Table triTable tells us, depending on the pattern of the cube, which vertices in our vertexlist should form a triangle.
 	// SJ: Therefore, when we lookup into triTable we get a list of indices into our vertexlist.
 	// SJ: Always the consecutive 3 indices into vertexlist form a triangle (i += 3).
 	ntriang = 0;
-	for (int i = 0; triTable[cubeindex][i] != -1; i += 3) {
-		triangles[ntriang].p[0] = vertlist[triTable[cubeindex][i]] *  0.01;
-		triangles[ntriang].p[1] = vertlist[triTable[cubeindex][i + 1]] * 0.01;
-		triangles[ntriang].p[2] = vertlist[triTable[cubeindex][i + 2]] * 0.01;
-		//triangles[ntriang].p[0].x() = triangles[ntriang].p[0].x() * 0.606;
-		//triangles[ntriang].p[1].x() = triangles[ntriang].p[1].x() * 0.606;
-		//triangles[ntriang].p[2].x() = triangles[ntriang].p[2].x() * 0.606;
-		//triangles[ntriang].p[0].y() = triangles[ntriang].p[0].y() * 0.505;
-		//triangles[ntriang].p[1].y() = triangles[ntriang].p[1].y() * 0.505;
-		//triangles[ntriang].p[2].y() = triangles[ntriang].p[2].y() * 0.505;
+	for (int i = 0; triTable[cubeindex][i] != -1; i += 3) 
+	{
+		triangles[ntriang].v[0] = vertlist[triTable[cubeindex][i]];
+		triangles[ntriang].v[1] = vertlist[triTable[cubeindex][i + 1]];
+		triangles[ntriang].v[2] = vertlist[triTable[cubeindex][i + 2]];
 		ntriang++;
 	}
 
 	return ntriang;
 }
-
 
 bool ProcessVolumeCell(Volume* vol, int x, int y, int z, double iso, SimpleMesh* mesh)
 {
@@ -509,7 +521,7 @@ bool ProcessVolumeCell(Volume* vol, int x, int y, int z, double iso, SimpleMesh*
 	Vector3d tmp;
 
 	// cell corners
-	// SJ: The entire volume is subdivided into cube-cells of size vol.dx*vol.dy*vol.dz, which each can be identified by an index [x,y,z].
+	// SJ: The entire volume is subdivided into cube-cells (voxels) of size vol.dx*vol.dy*vol.dz, which each can be identified by an index [x,y,z].
 	// SJ: We select the current cube-cell by its index [x,y,z] and calculate its corner positions.
 	// SJ: The exact corner positions are determined by the sampling of the volume.
 	// SJ: We start with the bottom-right-front corner [x+1,y,z], then the bottom-left-front [x,y,z], ... and stop with the top-right-back corner [x+1,y+1,z+1] corner.
@@ -541,6 +553,15 @@ bool ProcessVolumeCell(Volume* vol, int x, int y, int z, double iso, SimpleMesh*
 	cell.val[6] = (double)vol->get(x, y + 1, z + 1);
 	cell.val[7] = (double)vol->get(x + 1, y + 1, z + 1);
 
+	cell.c[0] = vol->getColor(x + 1, y, z);
+	cell.c[1] = vol->getColor(x, y, z);
+	cell.c[2] = vol->getColor(x, y + 1, z);
+	cell.c[3] = vol->getColor(x + 1, y + 1, z);
+	cell.c[4] = vol->getColor(x + 1, y, z + 1);
+	cell.c[5] = vol->getColor(x, y, z + 1);
+	cell.c[6] = vol->getColor(x, y + 1, z + 1);
+	cell.c[7] = vol->getColor(x + 1, y + 1, z + 1);
+
 	// SJ: After that we do the polygonisation, which finally returns the triangles that form the mesh.
 	MC_Triangle tris[6];
 	int numTris = Polygonise(cell, iso, tris);
@@ -552,10 +573,14 @@ bool ProcessVolumeCell(Volume* vol, int x, int y, int z, double iso, SimpleMesh*
 	// SJ: Here we add each triangle to our mesh.
 	for (int i1 = 0; i1 < numTris; i1++)
 	{
+		MC_Vertex& t_v0 = tris[i1].v[0];
+		MC_Vertex& t_v1 = tris[i1].v[1];
+		MC_Vertex& t_v2 = tris[i1].v[2];
+
 		// SJ: Save each triangle vertex in a new vector.
-		Vertex v0((float)tris[i1].p[0][0], (float)tris[i1].p[0][1], (float)tris[i1].p[0][2]);
-		Vertex v1((float)tris[i1].p[1][0], (float)tris[i1].p[1][1], (float)tris[i1].p[1][2]);
-		Vertex v2((float)tris[i1].p[2][0], (float)tris[i1].p[2][1], (float)tris[i1].p[2][2]);
+		Vertex v0((float)t_v0.p.x(), (float)t_v0.p.y(), (float)t_v0.p.z(), t_v0.c.x(), t_v0.c.y(), t_v0.c.z(), t_v0.c.w());
+		Vertex v1((float)t_v1.p.x(), (float)t_v1.p.y(), (float)t_v1.p.z(), t_v1.c.x(), t_v1.c.y(), t_v1.c.z(), t_v1.c.w());
+		Vertex v2((float)t_v2.p.x(), (float)t_v2.p.y(), (float)t_v2.p.z(), t_v2.c.x(), t_v2.c.y(), t_v2.c.z(), t_v2.c.w());
 
 		// SJ: Add each vertex to our mesh, which returns the index of the added vertex.
 		unsigned int vhandle[3];
