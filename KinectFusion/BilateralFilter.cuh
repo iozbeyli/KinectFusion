@@ -136,9 +136,9 @@ public:
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
-		int filterHalfSize = 5;
-		float sigmaSpatial = 1.6f;
-		float sigmaRange = 1.6f;
+		int filterHalfSize = 6;
+		float sigmaSpatial = 2.0f;
+		float sigmaRange = 2.0f;
 
 		applyBilateralFilter<<<gridSize, blockSize>>>(m_outputMap, m_inputMap, m_width, m_height,sigmaSpatial,sigmaRange,filterHalfSize);
 		gridSize = dim3(m_width / 32, m_height / 32);
@@ -155,9 +155,9 @@ public:
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
-		int filterHalfSize = 3;
-		float sigmaSpatial = 1.0f;
-		float sigmaRange = 1.0f;
+		int filterHalfSize = 6;
+		float sigmaSpatial = 2.0f;
+		float sigmaRange = 2.0f;
 
 		applyBilateralFilter <<<gridSize, blockSize>>> (m_outputMap, input, m_width, m_height, sigmaSpatial, sigmaRange, filterHalfSize);
 		//m_outputMap = input;
