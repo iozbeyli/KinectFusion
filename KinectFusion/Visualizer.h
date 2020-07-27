@@ -52,10 +52,10 @@ public:
 								//normalCalculatorModel(640, 480),
 								poseEstimator(640, 480, 10, 1.0f),
 								prevBackProjector(640, 480), 
-#if USE_GRADIENT_NORMALS // No need to allocate prev normal calculator in this case
-#else
+//#if USE_GRADIENT_NORMALS // No need to allocate prev normal calculator in this case
+//#else
 								prevNormalCalculator(640, 480),
-#endif
+//#endif
 								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
 								poseEstimatorSecondLevel(160, 120, 4, 0.25f),
 								volume(640, 480, 0.06, 500, 0.01, 1),
@@ -100,11 +100,14 @@ public:
 			exit(1);
 		}
 
+#if USE_GRADIENT_NORMALS
+#else
 		if (!prevNormalCalculator.isOK())
 		{
 			std::cerr << "Failed to initialize the normal calculator model!\nCheck your gpu memory!" << std::endl;
 			exit(1);
 		}
+#endif
 
 		if (!poseEstimator.isOk())
 		{
@@ -171,6 +174,7 @@ public:
 
 	static void updateImageFrame() 
 	{
+		//if (Instance->frameNumber > 5) return;
 		/*if (Instance->frameNumber > 10700)
 		{
 			exportMesh();
@@ -189,18 +193,26 @@ public:
 		Instance->frameNumber++;
 
 		// Input pipeline
-		Instance->filterer.applyFilter(Instance->depthImage);
+		bool a;
+		a = Instance->filterer.applyFilter(Instance->depthImage);
+		//std::cout < a;
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(), Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
 		Instance->normalCalculator.apply(Instance->backProjector.getOutputGPU(-1), Instance->backProjector.getOutputGPU(0), Instance->backProjector.getOutputGPU(1), Instance->backProjector.getOutputGPU(2));
 
 		auto getPrevNormal = [&](int level) {
-			bool useGrad = MODEL_TO_FRAME && USE_GRADIENT_NORMALS;
-			return useGrad ? Instance->filtererModel.getNormalsGPU(level) : Instance->prevNormalCalculator.getOutputGPU(level);
+#if USE_GRADIENT_NORMALS
+			return Instance->filtererModel.getNormalsGPU(level);
+#else
+			return Instance->prevNormalCalculator.getOutputGPU(level);
+#endif
 		};
 
 		auto getPrevMask = [&](int level) {
-			bool useGrad = MODEL_TO_FRAME && USE_GRADIENT_NORMALS;
-			return useGrad ? Instance->filtererModel.getValidMaskGPU(level) : Instance->prevNormalCalculator.getValidMaskGPU(level);
+#if USE_GRADIENT_NORMALS
+			return Instance->filtererModel.getValidMaskGPU(level);
+#else
+			return Instance->prevNormalCalculator.getValidMaskGPU(level);
+#endif
 		};
 
 		if (Instance->frameNumber > 0)
@@ -219,17 +231,17 @@ public:
 				if (Instance->poseEstimatorFirstLevel.apply(Instance->backProjector.getOutputGPU(1),
 					Instance->prevBackProjector.getOutputGPU(1),
 					Instance->normalCalculator.getOutputGPU(1),
-					Instance->prevNormalCalculator.getOutputGPU(1),
+					getPrevNormal(1),
 					Instance->normalCalculator.getValidMaskGPU(1),
-					Instance->prevNormalCalculator.getValidMaskGPU(1)))
+					getPrevMask(1)))
 				{
 					Instance->poseEstimator.setParams(Instance->poseEstimatorFirstLevel.getParamVector());
 					if (Instance->poseEstimator.apply(Instance->backProjector.getOutputGPU(0),
 						Instance->prevBackProjector.getOutputGPU(0),
 						Instance->normalCalculator.getOutputGPU(0),
-						Instance->prevNormalCalculator.getOutputGPU(0),
+						getPrevNormal(0),
 						Instance->normalCalculator.getValidMaskGPU(0),
-						Instance->prevNormalCalculator.getValidMaskGPU(0)))
+						getPrevMask(0)))
 					{
 						//std::cout << Instance->poseEstimator.getTransform() << std::endl;
 						Instance->currentTransform = Instance->currentTransform * Instance->poseEstimator.getTransform();
@@ -239,8 +251,6 @@ public:
 				}
 			}
 		}
-
-
 
 
 		if ((Instance->frameNumber % 10 == 11) && Instance->backProjector.copyToCPU())
@@ -272,6 +282,7 @@ public:
 
 		}
 
+
 		// Fuse surface into model
 		Instance->tsdf.apply(
 			Instance->volume, Instance->filterer.getInputGPU(), 
@@ -279,20 +290,25 @@ public:
 			Instance->sensor.GetColorRGBX(), Instance->currentTransform
 		);
 
+
 		if (!Instance->tsdf.isOk())
 		{
+			std::cout << "Here" << std::endl;
 			std::cerr << "[CUDA ERROR]: " << cudaGetErrorString(Instance->tsdf.status()) << std::endl;
 			exit(1);
 		}
+		// return;
 
 		// Raycast the available measurement
 		if (Instance->raycaster.apply(Instance->volume.sdf, Instance->volume.weights, Instance->volume.colors, Instance->currentTransform))
 		{
-			std::cout << "Raycasted" << std::endl;
+			//std::cout << "Raycasted" << std::endl;
 		}
-		else {
+		else 
+		{
 			std::cout << ":( Cannot raycast" << std::endl;
 		}
+		//return;
 
 
 		// Visualize the current input
@@ -658,7 +674,10 @@ private:
 	BackProjector backProjectorModel;
 	NormalCalculator normalCalculator;
 	BackProjector prevBackProjector;
+//#if USE_GRADIENT_NORMALS
+//#else
 	NormalCalculator prevNormalCalculator;
+//#endif
 	PoseEstimator poseEstimator;
 	PoseEstimator poseEstimatorFirstLevel;
 	PoseEstimator poseEstimatorSecondLevel;

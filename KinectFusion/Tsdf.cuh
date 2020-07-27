@@ -245,6 +245,7 @@ public:
 		//std::cout << frameCameraToWorld.block(0, 3, 3, 1) << std::endl;
 		//frameCameraToWorld.block(0, 3, 3, 1) = frameCameraToWorld.block(0, 3, 3, 1) * (-5);
 		//std::cout << frameCameraToWorld << std::endl;
+
 		cudaStatus = cudaMemcpy(gpuFrameColorMap, cpuFrameColorMap, COLOR_MAP_SIZE, cudaMemcpyHostToDevice);
 
 		if (cudaStatus != cudaSuccess)
@@ -271,7 +272,7 @@ public:
 		dim3 blocks((volume.VOXEL_COUNT_X + threads.x - 1) / threads.x,
 			(volume.VOXEL_COUNT_Y + threads.y - 1) / threads.y);
 
-		applyTsdf_v4 << <threads, blocks >> > (
+		applyTsdf_v4 <<<threads, blocks>>> (
 			gpuFrameDepthMap,
 			gpuFrameValidMask,
 			gpuFrameNormals,

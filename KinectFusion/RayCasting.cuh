@@ -74,7 +74,7 @@ int3 fitIndex(int3 index, int3 voxelDims)
 
 // See https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/interpolation/trilinear-interpolation
 // Assumes the provided index is inside the grid boundaries
-__device__
+__device__ __forceinline__
 float interpolate3(float *grid, float* weights, float3 point, int3 index, int3 voxelDims, float voxelSize)
 {
 	// Get the indices
@@ -220,9 +220,9 @@ __global__ void rayCast(
 		float3 normalizedCamera = rot(w2c, &beforeNormalization);
 		float magnitude = l2norm(normalizedCamera);
 		float3 normalized = scaled(normalizedCamera, 1.0f / magnitude);
-		normal[3 * indexImage] = normalized.x;
-		normal[3 * indexImage + 1] = normalized.y;
-		normal[3 * indexImage + 2] = normalized.z;
+		normal[3 * indexImage] = -normalized.x;
+		normal[3 * indexImage + 1] = -normalized.y;
+		normal[3 * indexImage + 2] = -normalized.z;
 	}
 	
 	// Fill depth and color even without normals

@@ -34,6 +34,7 @@ void applyBilateralFilter(
 	float weightSumNormal = 0; // make_float3(0, 0, 0);
 	int indexNormal = 3 * (y * imageWidth + x);
 	float3 centerNormal;
+	//filterNormals = false;
 	if (filterNormals) {
 		centerNormal = make_float3(
 			inputNormals[indexNormal],
@@ -112,7 +113,7 @@ void subSample(
 
 	float3 resultNormal = make_float3(0, 0, 0);
 	int validCountNormal = 0;
-	int indexNormal = 3 * ((y * inputWidth + x) / 2);
+	//doNormals = false;
 
 	for (int i = -filterHalfSize; i <= filterHalfSize; ++i) {
 		for (int j = -filterHalfSize; j <= filterHalfSize; ++j) {
@@ -149,6 +150,7 @@ void subSample(
 		output[y * (inputWidth / 2) + x] = -INFINITY;
 	}
 
+	int indexNormal = 3 * (y * (inputWidth / 2) + x);
 	if (doNormals) {
 		if (validCountNormal > 0) {
 			outputNormals[indexNormal] = resultNormal.x / validCountNormal;
@@ -388,18 +390,18 @@ private:
 
 		const auto size = m_size * 3;
 		const auto boolSize = sizeof(bool) * (m_size / sizeof(float));
-		auto status = cudaMalloc((void**)m_normals, size);
+		auto status = cudaMalloc((void**)&m_normals, size);
 		CHECK_NORMALS_FILTER
-		status = cudaMalloc((void**)m_normalsFirstLevel, size / 4);
+		status = cudaMalloc((void**)&m_normalsFirstLevel, size / 4);
 		CHECK_NORMALS_FILTER
-		status = cudaMalloc((void**)m_normalsFirstLevel, size / 16);
+		status = cudaMalloc((void**)&m_normalsSecondLevel, size / 16);
 		CHECK_NORMALS_FILTER
 
-		status = cudaMalloc((void**)m_validMask, boolSize);
+		status = cudaMalloc((void**)&m_validMask, boolSize);
 		CHECK_NORMALS_FILTER
-		status = cudaMalloc((void**)m_validMaskFirstLevel, boolSize / 4);
+		status = cudaMalloc((void**)&m_validMaskFirstLevel, boolSize / 4);
 		CHECK_NORMALS_FILTER
-		status = cudaMalloc((void**)m_validMaskSecondLevel, boolSize / 16);
+		status = cudaMalloc((void**)&m_validMaskSecondLevel, boolSize / 16);
 		CHECK_NORMALS_FILTER
 	}
 

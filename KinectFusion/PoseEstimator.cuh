@@ -327,8 +327,8 @@ private:
 		{
 			return false;
 		}
-		//std::cout << Amat.sum() << std::endl;
-		//std::cout << bvec.sum() << std::endl;
+		//std::cout << Amat << std::endl;
+		//std::cout << bvec << std::endl;
 		// exit(0);
 		x = ::solve(Amat, bvec);
 		//std::cout << Amat << bvec << std::endl;
