@@ -55,7 +55,7 @@ public:
 								raycaster(640, 480, 0.06, 500, 0.01),
 								tsdf{}
 	{
-		std::string filenameIn = R"(c:\tmp\rgbd_dataset_freiburg1_xyz\)";
+		std::string filenameIn = FILENAME;
 		
 		if (!sensor.Init(filenameIn))
 		{
@@ -156,6 +156,7 @@ public:
 
 	static void updateImageFrame() 
 	{
+		
 		/*if (Instance->frameNumber > 10700)
 		{
 			exportMesh();
@@ -172,7 +173,8 @@ public:
 		float* normalsFirstLevel;
 		float* normalsSecondLevel;
 		Instance->frameNumber++;
-
+		//std::cout << Instance->frameNumber << std::endl;
+		//if (Instance->frameNumber < START_FRAME)return;
 		// Input pipeline
 		Instance->filterer.applyFilter(Instance->depthImage);
 		Instance->backProjector.apply(Instance->filterer.getInputGPU(), Instance->filterer.getOutputGPU(0), Instance->filterer.getOutputGPU(1), Instance->filterer.getOutputGPU(2));
@@ -215,18 +217,18 @@ public:
 			}
 		}
 
-		// Export Mesh
-		//if (Instance->frameNumber == 750)
-		//{
-		//	std::cout << "Exporting Mesh ..." << std::endl;
-		//	exportMesh();
-		//	std::cout << "Finished!" << std::endl;
-		//	exit(0);
-		//}
+		 //Export Mesh
+		if (Instance->frameNumber == END_FRAME)
+		{
+			std::cout << "Exporting Mesh ..." << std::endl;
+			exportMesh();
+			std::cout << "Finished!" << std::endl;
+			exit(0);
+		}
 
 		if ((Instance->frameNumber % 10 == 11) && Instance->backProjector.copyToCPU())
 		{
-			std::cout << Instance->frameNumber << std::endl;
+			
 			std::ofstream outFile("./vertices" + std::to_string(Instance->frameNumber) + ".off");
 			if (!outFile.is_open()) return exit(1);
 			outFile << "COFF" << std::endl;
@@ -268,16 +270,16 @@ public:
 		// Raycast the available measurement
 		if (Instance->raycaster.apply(Instance->volume.sdf, Instance->volume.weights, Instance->volume.colors, Instance->currentTransform))
 		{
-			std::cout << "Raycasted" << std::endl;
+			//std::cout << "Raycasted" << std::endl;
 		}
 		else {
-			std::cout << ":( Cannot raycast" << std::endl;
+			//std::cout << ":( Cannot raycast" << std::endl;
 		}
 
 
 		// Visualize the current input
 		auto& filtererInUse = Instance->filterer;
-		if (filtererInUse.copyToCPU() && Instance->raycaster.copyToCPU())
+		if (filtererInUse.copyToCPU() && Instance->raycaster.copyToCPU()&&Instance->prevNormalCalculator.copyToCPU()&&Instance->normalCalculator.copyToCPU())
 		{
 			image = filtererInUse.getOutputCPU(0);
 			imageFirstLevel = filtererInUse.getOutputCPU(1);
@@ -292,30 +294,34 @@ public:
 				for (int x = 0; x < 640; ++x)
 				{
 					int index = (y * 640 + x);
-					unsigned char* ptr = Instance->normalTexture->bits + 3 * index;
-					//unsigned char* ptr = Instance->depthTexture->bits + index;
+					unsigned char* ptrNormal = Instance->normalTexture->bits + 3 * index;
+					unsigned char* ptrNormalRaycast = Instance->normalTextureRaycast->bits + 3 * index;
+					unsigned char* ptrColor = Instance->colorTexture->bits + 3 * index;
+					unsigned char* ptr = Instance->depthTexture->bits + index;
+					unsigned char* ptrRaycast = Instance->depthTextureRaycast->bits + index;
 					unsigned char* ptrUnfiltered = Instance->depthTextureUnfiltered->bits + index;
-					/*float currentX = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[3 * index], -1) + 1.0f) * 127.5f;
-					float currentY = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index) + 1], -1) + 1.0f) * 127.5f;
-					float currentZ = (std::fmaxf(Instance->raycaster.getOutputNormalCPU()[(3 * index) + 2], -1) + 1.0f) * 127.5f;*/
-
-					/*if (Instance->frameNumber==69)
-					{
-						std::cout << Instance->raycaster.getOutputNormalCPU()[3 * index]
-							<< " , " << Instance->raycaster.getOutputNormalCPU()[(3 * index) + 1]
-							<< " , " << Instance->raycaster.getOutputNormalCPU()[(3 * index) + 2] << std::endl;
-					}*/
-					float currentUnfiltered = (std::fmaxf(Instance->raycaster.getOutputDepthCPU()[index], 0) / 5) * 255;
-					float current = ((std::fmaxf(Instance->depthImage[index], 0) / 5) * 255);
-					//float currentUnfiltered = std::fabsf((std::fmaxf(std::abs(Instance->depthImage[index] - Instance->raycaster.getOutputDepthCPU()[index]), 0) / 5) * 255);
-					/*ptr = (unsigned char)std::fminf(currentX, 255);
-					*(ptr + 1) = (unsigned char)std::fminf(currentY, 255);
-					*(ptr + 2) = (unsigned char)std::fminf(currentZ, 255);*/
-					*ptr = Instance->raycaster.getOutputColorCPU()[3 * index];
-					*(ptr + 1) = Instance->raycaster.getOutputColorCPU()[3 * index + 1];
-					*(ptr + 2) = Instance->raycaster.getOutputColorCPU()[3 * index + 2];
+					float currentX = (std::fmaxf(Instance->normalCalculator.getOutputCPU(-1)[3 * index], -1) + 1.0f) * 127.5f;
+					float currentY = (std::fmaxf(Instance->normalCalculator.getOutputCPU(-1)[(3 * index) + 1], -1) + 1.0f) * 127.5f;
+					float currentZ = (std::fmaxf(Instance->normalCalculator.getOutputCPU(-1)[(3 * index) + 2], -1) + 1.0f) * 127.5f;
+					float currentRaycastX = (std::fmaxf(Instance->prevNormalCalculator.getOutputCPU(-1)[3 * index], -1) + 1.0f) * 127.5f;
+					float currentRaycastY = (std::fmaxf(Instance->prevNormalCalculator.getOutputCPU(-1)[(3 * index) + 1], -1) + 1.0f) * 127.5f;
+					float currentRaycastZ = (std::fmaxf(Instance->prevNormalCalculator.getOutputCPU(-1)[(3 * index) + 2], -1) + 1.0f) * 127.5f;
+					float current = (std::fmaxf(image[index], 0) / 5) * 255;
+					float currentRaycast = (std::fmaxf(Instance->raycaster.getOutputDepthCPU()[index], 0) / 5) * 255;
+					float currentUnfiltered = ((std::fmaxf(Instance->depthImage[index], 0) / 5) * 255);
+					*ptrNormal = (unsigned char)std::fminf(currentX, 255);
+					*(ptrNormal + 1) = (unsigned char)std::fminf(currentY, 255);
+					*(ptrNormal + 2) = (unsigned char)std::fminf(currentZ, 255);
+					*ptrNormalRaycast = (unsigned char)std::fminf(currentRaycastX, 255);
+					*(ptrNormalRaycast + 1) = (unsigned char)std::fminf(currentRaycastY, 255);
+					*(ptrNormalRaycast + 2) = (unsigned char)std::fminf(currentRaycastZ, 255);
+					*ptrColor = Instance->raycaster.getOutputColorCPU()[3 * index];
+					*(ptrColor + 1) = Instance->raycaster.getOutputColorCPU()[3 * index + 1];
+					*(ptrColor + 2) = Instance->raycaster.getOutputColorCPU()[3 * index + 2];
 					//*ptr = (unsigned char)std::fminf(current, 255);
 					*ptrUnfiltered = (unsigned char)std::fminf(currentUnfiltered, 255);
+					*ptr = (unsigned char)std::fminf(current, 255);
+					*ptrRaycast = (unsigned char)std::fminf(currentRaycast, 255);
 
 					if (x < 320 && y < 240)
 					{
@@ -338,13 +344,25 @@ public:
 			glBindTexture(GL_TEXTURE_2D, tobjUnfiltered->id);
 			glTexImage2D(GL_TEXTURE_2D, 0, tobjUnfiltered->internalFormat, tobjUnfiltered->width, tobjUnfiltered->height, 0, tobjUnfiltered->imageFormat, GL_UNSIGNED_BYTE, tobjUnfiltered->bits);
 
-			TextureObject* tobj = Instance->normalTexture;
+			TextureObject* tobjNormal = Instance->normalTexture;
+			glBindTexture(GL_TEXTURE_2D, tobjNormal->id);
+			glTexImage2D(GL_TEXTURE_2D, 0, tobjNormal->internalFormat, tobjNormal->width, tobjNormal->height, 0, tobjNormal->imageFormat, GL_UNSIGNED_BYTE, tobjNormal->bits);
+
+			TextureObject* tobjNormalRaycast = Instance->normalTextureRaycast;
+			glBindTexture(GL_TEXTURE_2D, tobjNormalRaycast->id);
+			glTexImage2D(GL_TEXTURE_2D, 0, tobjNormalRaycast->internalFormat, tobjNormalRaycast->width, tobjNormalRaycast->height, 0, tobjNormalRaycast->imageFormat, GL_UNSIGNED_BYTE, tobjNormalRaycast->bits);
+
+			TextureObject* tobjColor = Instance->colorTexture;
+			glBindTexture(GL_TEXTURE_2D, tobjColor->id);
+			glTexImage2D(GL_TEXTURE_2D, 0, tobjColor->internalFormat, tobjColor->width, tobjColor->height, 0, tobjColor->imageFormat, GL_UNSIGNED_BYTE, tobjColor->bits);
+
+			TextureObject* tobj = Instance->depthTexture;
 			glBindTexture(GL_TEXTURE_2D, tobj->id);
 			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);
 
-			/*TextureObject* tobj = Instance->depthTexture;
-			glBindTexture(GL_TEXTURE_2D, tobj->id);
-			glTexImage2D(GL_TEXTURE_2D, 0, tobj->internalFormat, tobj->width, tobj->height, 0, tobj->imageFormat, GL_UNSIGNED_BYTE, tobj->bits);*/
+			TextureObject* tobjRaycast = Instance->depthTextureRaycast;
+			glBindTexture(GL_TEXTURE_2D, tobjRaycast->id);
+			glTexImage2D(GL_TEXTURE_2D, 0, tobjRaycast->internalFormat, tobjRaycast->width, tobjRaycast->height, 0, tobjRaycast->imageFormat, GL_UNSIGNED_BYTE, tobjRaycast->bits);
 
 			TextureObject* tobjFirstLevel = Instance->depthTextureFirstLevel;
 			glBindTexture(GL_TEXTURE_2D, tobjFirstLevel->id);
@@ -421,7 +439,7 @@ public:
 
 		GLfloat vertices[][3] =
 		{
-			{0.0f, 0.0f, 0.0f}, {0.25f, 0.0f, 0.0f},
+			{0.0f, 0.5f, 0.0f}, {0.25f, 0.5f, 0.0f},
 			{0.25f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}
 		};
 
@@ -437,12 +455,8 @@ public:
 		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
 
 		glTranslatef(0.25f, 0.0f, 0.0f);
-
-		glBindTexture(GL_TEXTURE_2D, Instance->normalTexture->id);
+		glBindTexture(GL_TEXTURE_2D, Instance->depthTexture->id);
 		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
-
-		/*glBindTexture(GL_TEXTURE_2D, Instance->depthTexture->id);
-		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);*/
 
 		glTranslatef(0.25f, 0.0f, 0.0f);
 
@@ -453,6 +467,27 @@ public:
 
 		glBindTexture(GL_TEXTURE_2D, Instance->depthTextureSecondLevel->id);
 		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+
+		glTranslatef(-0.75f, -0.5f, 0.0f);
+
+		glBindTexture(GL_TEXTURE_2D, Instance->normalTexture->id);
+		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+
+		glTranslatef(0.25f, 0.0f, 0.0f);
+
+		glBindTexture(GL_TEXTURE_2D, Instance->depthTextureRaycast->id);
+		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+	
+		glTranslatef(0.25f, 0.0f, 0.0f);
+
+		glBindTexture(GL_TEXTURE_2D, Instance->normalTextureRaycast->id);
+		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+
+		glTranslatef(0.25f, 0.0f, 0.0f);
+
+		glBindTexture(GL_TEXTURE_2D, Instance->colorTexture->id);
+		drawSimpleMesh(WITH_POSITION | WITH_TEXCOORD, 4, meshData, GL_QUADS);
+
 
 		glutSwapBuffers();
 	}
@@ -492,7 +527,7 @@ public:
 
 		glutInit(&argc, argv);
 		glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
-		glutInitWindowSize(1280, 240);
+		glutInitWindowSize(1280, 480);
 		glutCreateWindow("Sensor Reading");
 		// glutFullScreen();
 
@@ -501,18 +536,24 @@ public:
 		glutReshapeFunc(reshape);
 		glutKeyboardFunc(keyEvents);
 
+		colorTexture = createTexture(640, 480, GL_RGB, 3);
 		normalTexture = createTexture(640, 480, GL_RGB, 3);
+		normalTextureRaycast = createTexture(640, 480, GL_RGB, 3);
 		depthTextureUnfiltered = createTexture(640, 480, GL_LUMINANCE, 1);
 		depthTexture = createTexture(640, 480, GL_LUMINANCE, 1);
 		depthTextureFirstLevel = createTexture(320, 240, GL_LUMINANCE, 1);
 		depthTextureSecondLevel = createTexture(160, 120, GL_LUMINANCE, 1);
+		depthTextureRaycast = createTexture(640, 480, GL_LUMINANCE, 1);
 
 		glutMainLoop();
 
 		destroyKinect();
 
+		destroyTexture(colorTexture);
 		destroyTexture(normalTexture);
+		destroyTexture(normalTextureRaycast);
 		destroyTexture(depthTexture);
+		destroyTexture(depthTextureRaycast);
 		destroyTexture(depthTextureFirstLevel);
 		destroyTexture(depthTextureSecondLevel);
 		destroyTexture(depthTextureUnfiltered);
@@ -532,11 +573,14 @@ private:
 	static Visualizer* Instance;
 	
 	//std::string hudText;
+	TextureObject* colorTexture = nullptr;
 	TextureObject* normalTexture = nullptr;
+	TextureObject* normalTextureRaycast = nullptr;
 	TextureObject* depthTexture = nullptr;
 	TextureObject* depthTextureFirstLevel = nullptr;
 	TextureObject* depthTextureSecondLevel = nullptr;
 	TextureObject* depthTextureUnfiltered = nullptr;
+	TextureObject* depthTextureRaycast = nullptr;
 	float* depthImage;
 	float* depthImageRaw;
 	BYTE* colorMap;

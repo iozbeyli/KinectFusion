@@ -5,10 +5,29 @@
 #include "Eigen.h"
 #include "TsdfVolume.cuh"
 
+
+#if 0
+#define FILENAME "../data/rgbd_dataset_freiburg1_room/";
+#define X_OFFSET 1
+#define Y_OFFSET 1.5
+#define Z_OFFSET 1.5 
+#define START_FRAME 200
+#define END_FRAME 500
+#elif 1
+#define FILENAME "../data/rgbd_dataset_freiburg1_xyz/";
 #define X_OFFSET 4
 #define Y_OFFSET 3.5
 #define Z_OFFSET 1.5 
-
+#define START_FRAME 0
+#define END_FRAME 800
+#elif 0
+#define FILENAME "../data/rgbd_dataset_freiburg1_rpy/";
+#define X_OFFSET 3
+#define Y_OFFSET 3.5
+#define Z_OFFSET 3
+#define START_FRAME 0
+#define END_FRAME 500
+#endif
 
 __device__ __forceinline__ 
 float l2norm(const float3 v)
