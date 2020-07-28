@@ -86,13 +86,16 @@ __global__ void rayCast(
 	int3 index;
 	float sdfValue;
 	int voxelId;
+
 	// Send the ray
 	for (int i = 0; i < maxIteration; ++i)
 	{
 		// Move the ray
 		takeStep(&point, scaled(step, stepSize));
+
 		// Calculate the voxel index
 		index=voxelIndex(point, voxelSize);
+
 		// Exit if goes out or on boundary for normals
 		if (index.x >= (voxelX-1) || index.x < 0 ||
 			index.y >= (voxelY-1) || index.y < 0 ||
@@ -100,6 +103,7 @@ __global__ void rayCast(
 		{
 			break;
 		}
+
 		// Take the last sdf value
 		// if weight is zero or inf, set step to truncation distance
 		// otherwise, set step to distance
@@ -124,10 +128,12 @@ __global__ void rayCast(
 			break;
 		}
 	}
+	
 	int indexImage = y * width + x;
 	int voxelIdRight = (voxelX * voxelY * index.z) + (voxelX * index.y) + index.x + 1;
 	int voxelIdTop = (voxelX * voxelY * index.z) + (voxelX * (index.y + 1)) + index.x;
 	int voxelIdBehind = (voxelX * voxelY * (index.z + 1)) + (voxelX * index.y) + index.x;
+	
 	if (success && weights[voxelIdRight] > 0.1 && weights[voxelIdTop] > 0.1 && weights[voxelIdBehind] > 0.1)
 	{
 		float right = sdf[voxelIdRight] - sdfValue;
@@ -152,9 +158,9 @@ __global__ void rayCast(
 		color[3 * indexImage] = sdfColor[4 * voxelId];
 		color[3 * indexImage + 1] = sdfColor[4 * voxelId + 1];
 		color[3 * indexImage + 2] = sdfColor[4 * voxelId + 2];
-
 	}
-	else {
+	else 
+	{
 		depth[indexImage] = -INFINITY; // 10.0f;
 		normal[3 * indexImage] = -INFINITY; //1.0f;
 		normal[3 * indexImage + 1] = -INFINITY; //-1.0f;
@@ -229,7 +235,27 @@ public:
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
-		rayCast<<<gridSize, blockSize>>>(m_depth,m_normal,m_color, sdf, weights, sdfColor, m_c2w, m_w2c, m_truncation, m_voxelSize, m_voxelCount, m_voxelCount, m_voxelCount, m_width, m_height);
+		// SJ: Max numbers of threads per block is limited to 1024, so lets make full use of it.
+		dim3 threads(32, 32);
+		dim3 blocks((m_width + threads.x - 1) / threads.x, (m_height + threads.y - 1) / threads.y);
+
+		rayCast<<<threads, blocks>>>(
+			m_depth,
+			m_normal,
+			m_color, 
+			sdf,
+			weights, 
+			sdfColor, 
+			m_c2w, 
+			m_w2c, 
+			m_truncation, 
+			m_voxelSize,
+			m_voxelCount,
+			m_voxelCount, 
+			m_voxelCount, 
+			m_width, 
+			m_height
+			);
 		
 		return true;
 	}

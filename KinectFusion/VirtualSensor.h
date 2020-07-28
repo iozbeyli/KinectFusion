@@ -101,9 +101,14 @@ public:
 		for (unsigned int i = 0; i < m_depthImageWidth * m_depthImageHeight; ++i)
 		{
 			if (dImage.data[i] == 0)
+			{
 				m_depthFrame[i] = MINF;
+			}
 			else
+			{
 				m_depthFrame[i] = dImage.data[i] * 1.0f / 5000.0f;
+				// std::cout << "Original depth: " << dImage.data[i] << " Changed depth: " << m_depthFrame[i] << std::endl;
+			}
 		}
 
 		// find transformation (simple nearest neighbor, linear search)

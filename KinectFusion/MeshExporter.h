@@ -9,21 +9,26 @@
 class MeshExporter
 {
 public:
-	MeshExporter(const TsdfVolume& tsdfVolume, float isolevel)
-		: tsdf {tsdfVolume}
-		, isolevel {isolevel}
+	//MeshExporter(const TsdfVolume& tsdfVolume, float isolevel)
+	//	: tsdf {tsdfVolume}
+	//	, isolevel {isolevel}
+	//{}
+
+	MeshExporter( float isolevel)
+		: isolevel{ isolevel }
 	{}
 
-	void exportMesh(const std::string& filePath)
+	void exportMesh(const std::string& filePath, TsdfVolume& tsdf)
 	{
-		if (!tsdf.copyToCPU())
-			return;
-
 		Volume vol(Vector3d(0, 0, 0), Vector3d(1, 1, 1), tsdf.voxelCountX, tsdf.voxelCountY, tsdf.voxelCountZ, 1);
 		UINT infcount = 0;
 		UINT nancount = 0;
-		UINT weightscount = 0;
-		UINT valuescount = 0;
+		UINT weightCount = 0;
+		UINT valueCount = 0;
+		float maxSdf = std::numeric_limits<float>().min();
+		float minSdf = std::numeric_limits<float>().max();
+		float maxWeight = std::numeric_limits<float>().min();
+		float minWeight = std::numeric_limits<float>().max();
 
 		for (unsigned int x = 0; x < tsdf.voxelCountX; ++x)
 		{
@@ -48,8 +53,13 @@ public:
 						continue;
 					}
 
-					if (val > 0)
-						valuescount++;
+					valueCount++;
+
+					if (val > maxSdf)
+						maxSdf = val;
+
+					if (val < minSdf)
+						minSdf = val;
 
 					vol.set(x, y, z, val);
 					vol.setColor(x, y, z, c);
@@ -57,7 +67,8 @@ public:
 			}
 		}
 
-		std::cout << "Infinity values: " << infcount << " NAN values: " << nancount << " Actual values: " << valuescount << std::endl;
+		std::cout << "Infinity sdf: " << infcount << " NAN sdf: " << nancount << " sdf count: " << valueCount << std::endl;
+		std::cout << "Min sdf: " << minSdf << " Max sdf: " << maxSdf << std::endl;
 
 		SimpleMesh mesh{ true };
 		for (unsigned int x = 0; x < tsdf.voxelCountX - 1; ++x)
@@ -70,14 +81,20 @@ public:
 
 					if (weight > 0)
 					{
-						weightscount++;
+						if (weight > maxWeight)
+							maxWeight = weight;
+
+						if (weight < minWeight)
+							minWeight = weight;
+
+						weightCount++;
 						ProcessVolumeCell(&vol, x, y, z, isolevel, &mesh);
 					}
 				}
 			}
 		}
 
-		std::cout << "Weights count: " << weightscount << std::endl;
+		std::cout << "Weights count: " << weightCount << " Min weight: " << minWeight << " Max weight: " << maxWeight << std::endl;
 
 		// write mesh to file
 		if (!mesh.WriteMesh(filePath))
@@ -87,6 +104,5 @@ public:
 	}
 
 private:
-	TsdfVolume tsdf;
 	float isolevel;
 };

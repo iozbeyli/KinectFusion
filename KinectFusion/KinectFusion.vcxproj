@@ -99,7 +99,9 @@
     <ClInclude Include="FreeImageHelper.h" />
     <ClInclude Include="GlobalModel.cuh" />
     <ClInclude Include="GLUtilities.h" />
-    <ClInclude Include="KinectSensor.h" />
+    <ClInclude Include="KinectNuiSensor.h" />
+    <ClInclude Include="KinectNuiSensor2.h" />
+    <ClInclude Include="KinectOpenNISensor.h" />
     <ClInclude Include="MarchingCubes.h" />
     <ClInclude Include="MeshExporter.h" />
     <ClInclude Include="NormalCalculation.cuh" />

@@ -5,9 +5,13 @@
 #include "Eigen.h"
 #include "TsdfVolume.cuh"
 
-#define X_OFFSET 4
-#define Y_OFFSET 3.5
-#define Z_OFFSET 1.5 
+//#define X_OFFSET 4
+//#define Y_OFFSET 3.5
+//#define Z_OFFSET 1.5 
+
+#define X_OFFSET 2.5f // 4
+#define Y_OFFSET 2.5f // 3.5
+#define Z_OFFSET 2.5f // 1.5 
 
 
 __device__ __forceinline__ 
@@ -153,11 +157,14 @@ void applyTsdf_v4
 		const int VOXEL_COLOR_IDX = VOXEL_IDX * 4;
 		const int FRAME_COLOR_IDX = FRAME_IDX * 4;
 		const float W_R = 1.0f;
+		const float current_w = weights[VOXEL_IDX];
+		const float current_sdf = sdfs[VOXEL_IDX];
 
-		float s = (weights[VOXEL_IDX] * sdfs[VOXEL_IDX]) + (W_R * tsdf) / (weights[VOXEL_IDX] + W_R);
-		if (isinf(s)) {
+		float s = (weights[VOXEL_IDX] * sdfs[VOXEL_IDX] + W_R * tsdf) / (weights[VOXEL_IDX] + W_R);
+
+		if (isinf(s))
 			continue;
-		}
+		
 		sdfs[VOXEL_IDX] = s;
 
 		float r = ((weights[VOXEL_IDX] * (float)colors[VOXEL_COLOR_IDX + 0]) + (W_R * (float)gpuFrameColorMap[FRAME_COLOR_IDX + 0])) / (weights[VOXEL_IDX] + W_R);
@@ -174,6 +181,147 @@ void applyTsdf_v4
 	}
 }
 	
+__global__
+void applyTsdf_v5
+(
+	float* gpuFrameDepthMap,
+	bool* gpuFrameValidMask,
+	BYTE* const gpuFrameColorMap,
+	const float* worldToCamera,
+	const float* cameraToWorld,
+	float* sdfs,
+	float* weights,
+	BYTE* colors,
+	const int frameWidth,
+	const int frameHeight,
+	const int voxelCountX,
+	const int voxelCountY,
+	const int voxelCountZ,
+	const float voxelSize,
+	const float fovX,
+	const float fovY,
+	const float fovCenterX,
+	const float fovCenterY,
+	const float truncation,
+	const float maxWeight)
+{
+	int x = blockIdx.x * blockDim.x + threadIdx.x;
+	int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	// SJ: Idle gpu thread, if we are outside the bounds of our volume.
+	if ((x >= voxelCountX) || (y >= voxelCountY))
+		return;
+
+	// SJ: Each GPU thread handles a voxel row in z-direction.
+	for (int z = 0; z < voxelCountZ; ++z)
+	{
+		// SJ: x,y,z are voxel coordinates, so we need to convert them to real world coordinates first.
+		// SJ: Calculate the currents voxel center position in the world coordinate system. 
+		float3 voxelCenterWorldCoord = make_float3((x + .5f) * voxelSize, (y + .5f) * voxelSize, (z + .5f) * voxelSize);
+		voxelCenterWorldCoord.x -= X_OFFSET;
+		voxelCenterWorldCoord.y -= Y_OFFSET;
+		voxelCenterWorldCoord.z -= Z_OFFSET;
+
+		// SJ: Transform to camera coordinate system
+		float3 voxelCenterCameraCoord = mul(worldToCamera, &voxelCenterWorldCoord);
+		//float3 voxelCenterCameraCoord = matrot(worldToCamera, &voxelCenterWorldCoord);
+		//voxelCenterCameraCoord.x += worldToCamera[12];
+		//voxelCenterCameraCoord.y += worldToCamera[13];
+		//voxelCenterCameraCoord.z += worldToCamera[14];
+
+		// SJ: If voxel is behind the camera ignore and continue.
+		if (voxelCenterCameraCoord.z <= 0)
+			continue;
+
+		// SJ: Project voxel position to camera image plane.
+		const int u = static_cast<int>(round(voxelCenterCameraCoord.x / voxelCenterCameraCoord.z * fovX + fovCenterX));
+		const int v = static_cast<int>(round(voxelCenterCameraCoord.y / voxelCenterCameraCoord.z * fovY + fovCenterY));
+
+		// SJ: If voxel position is not on the image plane continue.
+		if (u < 0 || u >= frameWidth || v < 0 || v >= frameHeight)
+			continue;
+
+		const int FRAME_IDX = v * frameWidth + u;
+		if (!gpuFrameValidMask[FRAME_IDX])
+			continue;
+
+		const float depth = gpuFrameDepthMap[FRAME_IDX];
+
+		// SJ: Check if we have a valid depth for that pixel coordinate.
+		if (isinf(depth) || depth <= 0)
+			continue;
+
+		float3 surfacePointCameraCoord = make_float3((x - fovCenterX) / fovX, (y - fovCenterY) / fovY, 1.0f);
+		surfacePointCameraCoord.x *= depth;
+		surfacePointCameraCoord.y *= depth;
+		surfacePointCameraCoord.z *= depth;
+
+		float3 surfacePointWorldCoord = mul(cameraToWorld, &surfacePointCameraCoord);
+
+
+		// const float3 cameraTranslation = make_float3(worldToCamera[12], worldToCamera[13], worldToCamera[14]);
+		const float3 cameraTranslation = make_float3(cameraToWorld[12], cameraToWorld[13], cameraToWorld[14]);
+		const float distanceCameraToVoxel = l2norm(make_float3
+		(
+			cameraTranslation.x - voxelCenterWorldCoord.x,
+			cameraTranslation.y - voxelCenterWorldCoord.y,
+			cameraTranslation.z - voxelCenterWorldCoord.z
+		));
+
+		const float distanceCameraToSurface = l2norm(make_float3
+		(
+			cameraTranslation.x - surfacePointWorldCoord.x,
+			cameraTranslation.y - surfacePointWorldCoord.y,
+			cameraTranslation.z - surfacePointWorldCoord.z
+		));
+
+		const float lambda = l2norm(make_float3((u - fovCenterX) / fovX, (v - fovCenterY) / fovY, 1.0f));
+		const float signedDistance = (-1.f) * ((1.f / lambda) * l2norm(voxelCenterCameraCoord) - depth);
+		// const float signedDistance = (-1) * (distanceCameraToVoxel - distanceCameraToSurface);
+		// const float signedDistance = (surfacePointCameraCoord.z - voxelCenterCameraCoord.z);
+		// const float signedDistance = (-1)*(distanceCameraToVoxel - depth);
+
+		// SJ: If we are outside the truncation range continue.
+		if (fabsf(signedDistance) > truncation)
+			continue;
+
+		float tsdf = fminf(1.0f, signedDistance / truncation);
+
+		//float tsdf = signedDistance > 0.0f
+		//	? fminf(1.0f, signedDistance / truncation)
+		//	: signedDistance;
+
+		const int VOXEL_IDX = (voxelCountX * voxelCountY * z) + (voxelCountX * y) + x;
+		const int VOXEL_COLOR_IDX = VOXEL_IDX * 4;
+		const int FRAME_COLOR_IDX = FRAME_IDX * 4;
+		const float W_R = 1.0f;
+		const float current_w = weights[VOXEL_IDX];
+		const float current_sdf = sdfs[VOXEL_IDX];
+
+		float s = (weights[VOXEL_IDX] * sdfs[VOXEL_IDX] + W_R * tsdf) / (weights[VOXEL_IDX] + W_R);
+
+		if (isinf(s))
+			continue;
+
+		sdfs[VOXEL_IDX] = s;
+
+		if (fabsf(tsdf) <= (truncation / 2))
+		{
+			float r = ((weights[VOXEL_IDX] * (float)colors[VOXEL_COLOR_IDX + 0]) + (W_R * (float)gpuFrameColorMap[FRAME_COLOR_IDX + 0])) / (weights[VOXEL_IDX] + W_R);
+			float g = ((weights[VOXEL_IDX] * (float)colors[VOXEL_COLOR_IDX + 1]) + (W_R * (float)gpuFrameColorMap[FRAME_COLOR_IDX + 1])) / (weights[VOXEL_IDX] + W_R);
+			float b = ((weights[VOXEL_IDX] * (float)colors[VOXEL_COLOR_IDX + 2]) + (W_R * (float)gpuFrameColorMap[FRAME_COLOR_IDX + 2])) / (weights[VOXEL_IDX] + W_R);
+			colors[VOXEL_COLOR_IDX + 0] = r; // gpuFrameColorMap[FRAME_COLOR_IDX + 0];
+			colors[VOXEL_COLOR_IDX + 1] = g; // gpuFrameColorMap[FRAME_COLOR_IDX + 1];
+			colors[VOXEL_COLOR_IDX + 2] = b; // gpuFrameColorMap[FRAME_COLOR_IDX + 2];
+			colors[VOXEL_COLOR_IDX + 3] = 255;
+		}
+
+		float w = fminf(weights[VOXEL_IDX] + W_R, maxWeight);
+		weights[VOXEL_IDX] = w;
+
+	}
+}
+
 class Tsdf
 {
 public:
