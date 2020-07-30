@@ -51,7 +51,6 @@
     <ClInclude Include="PoseEstimator.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GlobalModel.cuh" />
     <ClInclude Include="MarchingCubes.h" />
     <ClInclude Include="Raycaster.cuh" />
     <ClInclude Include="SimpleMesh.h" />

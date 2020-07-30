@@ -8,14 +8,14 @@
 
 #if 0
 #define FILENAME "../data/rgbd_dataset_freiburg1_room/";
-#define X_OFFSET 1
-#define Y_OFFSET 1.5
+#define X_OFFSET 2
+#define Y_OFFSET 2.5
 #define Z_OFFSET 1.5 
-#define START_FRAME 200
+#define START_FRAME 0
 #define END_FRAME 500
 #elif 1
 #define FILENAME "../data/rgbd_dataset_freiburg1_xyz/";
-#define X_OFFSET 4
+#define X_OFFSET 2.5
 #define Y_OFFSET 3.5
 #define Z_OFFSET 1.5 
 #define START_FRAME 0
@@ -173,7 +173,7 @@ void applyTsdf_v4
 		const int FRAME_COLOR_IDX = FRAME_IDX * 4;
 		const float W_R = 1.0f;
 
-		float s = (weights[VOXEL_IDX] * sdfs[VOXEL_IDX]) + (W_R * tsdf) / (weights[VOXEL_IDX] + W_R);
+		float s = ((weights[VOXEL_IDX] * sdfs[VOXEL_IDX]) + (W_R * tsdf)) / (weights[VOXEL_IDX] + W_R);
 		if (isinf(s)) {
 			continue;
 		}

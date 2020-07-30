@@ -51,7 +51,7 @@ public:
 								prevNormalCalculator(640, 480),
 								poseEstimatorFirstLevel(320, 240, 5, 0.5f),
 								poseEstimatorSecondLevel(160, 120, 4, 0.25f),
-								volume(640, 480, 0.06, 500, 0.01, 1),
+								volume(640, 480, 0.06, 500, 0.01, std::numeric_limits<float>().max()),
 								raycaster(640, 480, 0.06, 500, 0.01),
 								tsdf{}
 	{
