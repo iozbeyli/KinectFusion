@@ -16,7 +16,7 @@
 ## Other Dependencies
 We created a dynamic link library for Eigen solver, as the solver class could not be compiled by the NVCC version we use. The library can be downloaded from [here](https://drive.google.com/drive/folders/1NZOTIxDlY8AsV2r4TFKyiWV8bJXFaE4v?usp=sharing). It exports `solve` function and is only used in `PoseEstimator.cuh`.
 
-## Note on normal estimation
+## Note on Normal Estimation
 Currently, we do not use normals estimated in the raycasting. We instead use the backprojection pipeline from the rendered depth. We attempted to implement a trilinear interpolated version that can be seen in the cg01 branch, but did not use it in the final version.
 
 ## Authors
