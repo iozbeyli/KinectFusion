@@ -27,9 +27,6 @@
     <ClInclude Include="GLUtilities.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="KinectSensor.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Sensor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -51,9 +48,22 @@
     <ClInclude Include="PoseEstimator.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Visualizer.h">
+    <ClInclude Include="GlobalModel.cuh" />
+    <ClInclude Include="MarchingCubes.h" />
+    <ClInclude Include="Raycaster.cuh" />
+    <ClInclude Include="SimpleMesh.h" />
+    <ClInclude Include="Tsdf.cuh" />
+    <ClInclude Include="TsdfVolume.cuh" />
+    <ClInclude Include="Volume.h" />
+    <ClInclude Include="Visualizer.h" />
+    <ClInclude Include="MeshExporter.h" />
+    <ClInclude Include="RayCasting.cuh" />
+    <ClInclude Include="KinectNuiSensor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="KinectOpenNISensor.h" />
+    <ClInclude Include="KinectNuiSensor2.h" />
+    <ClInclude Include="Settings.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp">
@@ -65,5 +75,6 @@
     <ClCompile Include="TextureManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Volume.cpp" />
   </ItemGroup>
 </Project>

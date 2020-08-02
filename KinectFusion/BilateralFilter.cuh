@@ -88,12 +88,18 @@ void subSample(float* output, float* input, int inputWidth, int inputHeight, flo
 
 class Filterer {
 public: 
-	Filterer(int width, int height) 
+	Filterer(int width, int height, bool allocateInput) 
 	{
 		m_width = width;
 		m_height = height;
 		m_size = width * height * sizeof(float);
-		m_cudaStatusInput = cudaMalloc((void**)&m_inputMap, m_size);
+		if (allocateInput)
+		{
+			m_cudaStatusInput = cudaMalloc((void**)&m_inputMap, m_size);
+		}
+		else {
+			m_cudaStatusInput = cudaSuccess;
+		}
 		m_cudaStatusOutput = cudaMalloc((void**)&m_outputMap, m_size);
 		m_cudaStatusOutputFirstLevel = cudaMalloc((void**)&m_outputFirstLevelMap, m_size/4);
 		m_cudaStatusOutputSecondLevel = cudaMalloc((void**)&m_outputSecondLevelMap, m_size/16);
@@ -102,7 +108,7 @@ public:
 		m_outputSecondLevelMapCPU = (float*)malloc(m_size/16);
 	}
 	~Filterer() {
-		cudaFree(m_inputMap);
+		if (m_ownInput) cudaFree(m_inputMap);
 		cudaFree(m_outputMap);
 		cudaFree(m_outputFirstLevelMap);
 		cudaFree(m_outputSecondLevelMap);
@@ -130,9 +136,9 @@ public:
 		dim3 gridSize(m_width / 16, m_height / 16);
 		dim3 blockSize(16, 16);
 
-		int filterHalfSize = 3;
-		float sigmaSpatial = 1.0f;
-		float sigmaRange = 1.0f;
+		int filterHalfSize = 6;
+		float sigmaSpatial = 2.0f;
+		float sigmaRange = 2.0f;
 
 		applyBilateralFilter<<<gridSize, blockSize>>>(m_outputMap, m_inputMap, m_width, m_height,sigmaSpatial,sigmaRange,filterHalfSize);
 		gridSize = dim3(m_width / 32, m_height / 32);
@@ -140,6 +146,26 @@ public:
 		gridSize = dim3(m_width / 32, m_height / 32);
 		blockSize = dim3(8, 8);
 		subSample <<<gridSize, blockSize>>> (m_outputSecondLevelMap, m_outputFirstLevelMap, m_width / 2, m_height / 2, sigmaRange);
+		return true;
+	}
+
+	bool applyFilterGPU(float* input)
+	{
+		m_ownInput = false;
+		dim3 gridSize(m_width / 16, m_height / 16);
+		dim3 blockSize(16, 16);
+
+		int filterHalfSize = 6;
+		float sigmaSpatial = 2.0f;
+		float sigmaRange = 2.0f;
+
+		applyBilateralFilter <<<gridSize, blockSize>>> (m_outputMap, input, m_width, m_height, sigmaSpatial, sigmaRange, filterHalfSize);
+		//m_outputMap = input;
+		gridSize = dim3(m_width / 32, m_height / 32);
+		subSample<<<gridSize, blockSize >> > (m_outputFirstLevelMap, m_outputMap, m_width, m_height, sigmaRange);
+		gridSize = dim3(m_width / 32, m_height / 32);
+		blockSize = dim3(8, 8);
+		subSample<<<gridSize, blockSize >> > (m_outputSecondLevelMap, m_outputFirstLevelMap, m_width / 2, m_height / 2, sigmaRange);
 		return true;
 	}
 
@@ -186,7 +212,7 @@ public:
 	}
 
 private:
-	float* m_inputMap;
+	float* m_inputMap = nullptr;
 	float* m_outputMap;
 	float* m_outputFirstLevelMap;
 	float* m_outputSecondLevelMap;
@@ -200,4 +226,6 @@ private:
 	float* m_outputMapCPU;
 	float* m_outputFirstLevelMapCPU;
 	float* m_outputSecondLevelMapCPU;
+
+	bool m_ownInput = true;
 };

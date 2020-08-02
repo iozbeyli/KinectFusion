@@ -6,8 +6,6 @@
 #include "cublas_v2.h"
 #include "malloc.h"
 #include "EigenSolver.h"
-#include <arrayfire.h>
-#include <af/cuda.h>
 
 // TODO: Refactor
 #define FX 525.0f
@@ -15,7 +13,7 @@
 #define CX 319.5f
 #define CY 239.5f
 #define D_THRESHOLD 0.1f
-#define N_THRESHOLD 0.05f
+#define N_THRESHOLD 0.9f
 #define MIN_PARAM_CHANGE 0.000001f
 
 __device__ __forceinline__ void setZero(float* outputA, float* outputB, int indexA, int indexB)
@@ -48,6 +46,7 @@ void fillMatrix(float* outputA, float* outputB,
 		float* sourcePoints, float* targetPoints,
 		float* sourceNormals, float* targetNormals,
 		bool* validMask,
+		bool* targetValidMask,
 		float rX, float rY, float rZ,
 		float tX, float tY, float tZ,
 		int width, int height,
@@ -69,7 +68,7 @@ void fillMatrix(float* outputA, float* outputB,
 	int indexNormals = indexPoints;
 
 	// Set 0 for invalids
-	if (!validMask[indexWithoutChannel])
+	if (!validMask[indexWithoutChannel] || !targetValidMask[indexWithoutChannel])
 	{
 		setZero(outputA, outputB, indexA, indexB);
 		return;
@@ -116,6 +115,19 @@ void fillMatrix(float* outputA, float* outputB,
 	float nZ = targetNormals[indexNormals + 2];
 
 	// Perform normal threshold (TODO)
+	float sNX = sourceNormals[indexNormals];
+	float sNY = sourceNormals[indexNormals + 1];
+	float sNZ = sourceNormals[indexNormals + 2];
+	float rotatedSNX = sNX - rZ * sNY + rY * sNZ;
+	float rotatedSNY = rZ * sNX + sNY - rX * sNZ;
+	float rotatedSNZ = -rY * sNX + rX * sNY + sNZ;
+
+	float normalDot = dot(rotatedSNX, rotatedSNY, rotatedSNZ, nX, nY, nZ);
+	if (normalDot < normalThreshold)
+	{
+		setZero(outputA, outputB, indexA, indexB);
+		return;
+	}
 	
 	// Write values to A and B
 	outputA[indexA] = nZ * sY - nY * sZ;
@@ -182,7 +194,7 @@ public:
 		return result;
 	}
 
-	bool apply(float* sourcePoints, float* targetPoints, float* sourceNormals, float* targetNormals, bool* validMask)
+	bool apply(float* sourcePoints, float* targetPoints, float* sourceNormals, float* targetNormals, bool* validMask, bool* targetValidMask)
 	{
 		dim3 gridSize(m_width / 8, m_height / 8);
 		dim3 blockSize(8, 8);
@@ -193,6 +205,7 @@ public:
 							sourcePoints, targetPoints,
 							sourceNormals, targetNormals,
 							validMask,
+							targetValidMask,
 							m_rX, m_rY, m_rZ,
 							m_tX, m_tY, m_tZ,
 							m_width, m_height,
@@ -272,7 +285,8 @@ private:
 		int k = m_height * m_width;
 		const float alpha = 1.0f;
 		const float beta = 0;
-		status =  cublasSgemm(m_handle, CUBLAS_OP_N, CUBLAS_OP_T, n, n, k, &alpha, m_A, n, m_A, n,
+		status =  cublasSgemm(
+			m_handle, CUBLAS_OP_N, CUBLAS_OP_T, n, n, k, &alpha, m_A, n, m_A, n,
 			&beta, m_AtA, n);
 		/*status = cublasSsyrk(
 			m_handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N,
@@ -311,13 +325,14 @@ private:
 		{
 			return false;
 		}
+		//std::cout << Amat.sum() << std::endl;
+		//std::cout << bvec.sum() << std::endl;
+		// exit(0);
 		x = ::solve(Amat, bvec);
 		//std::cout << Amat << bvec << std::endl;
 		setParams(x);
 		return true;
 	}
-
-	
 
 	int m_width;
 	int m_height;
@@ -340,5 +355,3 @@ private:
 	cublasHandle_t m_handle;
 
 };
-
-

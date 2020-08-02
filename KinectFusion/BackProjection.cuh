@@ -102,7 +102,8 @@ public:
 		return true;
 	}
 
-	float* getOutputCPU(int level) {
+	float* getOutputCPU(int level) 
+	{
 		if (level == -1)
 		{
 			return m_outputBackProjectedUnfilteredCPU;
@@ -118,7 +119,8 @@ public:
 		return m_outputBackProjectedCPU;
 	}
 
-	float* getOutputGPU(int level) {
+	float* getOutputGPU(int level) 
+	{
 		if (level == -1)
 		{
 			return m_outputBackProjectedUnfiltered;
