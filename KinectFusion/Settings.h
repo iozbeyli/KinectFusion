@@ -1,3 +1,3 @@
 #pragma once
 
-#define KINECT 0
+#define KINECT 1

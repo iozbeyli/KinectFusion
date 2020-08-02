@@ -6,8 +6,8 @@
 #include <array>
 #include <GL/glew.h>
 #include <freeglut.h>
-// #include "KinectOpenNISensor.h"
 #include "Tsdf.cuh"
+
 #if KINECT
 #include "KinectNuiSensor2.h"
 #endif
@@ -40,7 +40,8 @@ class Visualizer
 public:
 
 	Visualizer(int skip = 1) :  
-		#if KINECT sensor{ 640, 480, false }, /*sensor(skip),*/
+#if KINECT 
+		sensor{ 640, 480, false },
 #else 
 		sensor(skip),
 #endif
@@ -432,7 +433,7 @@ public:
 			return;
 
 		MeshExporter me{ 0.0f };
-		me.exportMesh("tsdf.off", Instance->volume);
+		me.exportMesh("mesh.off", Instance->volume);
 		Instance->userRequestedExport = false;
 
 		std::cout << "Finished exporting mesh!" << std::endl;

@@ -63,6 +63,7 @@
     </ClInclude>
     <ClInclude Include="KinectOpenNISensor.h" />
     <ClInclude Include="KinectNuiSensor2.h" />
+    <ClInclude Include="Settings.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp">
