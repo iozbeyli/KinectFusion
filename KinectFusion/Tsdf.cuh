@@ -4,15 +4,21 @@
 #include "cuda_runtime.h"
 #include "Eigen.h"
 #include "TsdfVolume.cuh"
+#include "Settings.h"
 
 //#define X_OFFSET 4
 //#define Y_OFFSET 3.5
 //#define Z_OFFSET 1.5 
 
+#if KINECT
 #define X_OFFSET 2.5f // 4
 #define Y_OFFSET 2.5f // 3.5
 #define Z_OFFSET 2.5f // 1.5 
-
+#else
+#define X_OFFSET 2.5f // 4
+#define Y_OFFSET 3.5f // 3.5
+#define Z_OFFSET 1.5f // 1.5 
+#endif
 
 __device__ __forceinline__ 
 float l2norm(const float3 v)
