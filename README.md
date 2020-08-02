@@ -5,7 +5,7 @@
 
 ## Used Libraries
 - Eigen 3 
-- CUDA 10
+- CUDA 10.2
 - cuBlas
 - FreeImage
 - Kinect SDK 1.8
