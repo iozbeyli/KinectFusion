@@ -6,8 +6,6 @@
 #include "cublas_v2.h"
 #include "malloc.h"
 #include "EigenSolver.h"
-#include <arrayfire.h>
-#include <af/cuda.h>
 
 // TODO: Refactor
 #define FX 525.0f
